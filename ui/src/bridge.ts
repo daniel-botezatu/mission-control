@@ -93,22 +93,44 @@ export interface QueryOptions {
   state?: string | null;
 }
 
+export interface PullRequestItem {
+  number: number;
+  title: string;
+  repository: string;
+  url: string;
+  isDraft: boolean;
+  reviewDecision: string | null;
+  updatedAt: string;
+  status: string;
+  loop: "you" | "others";
+  author?: string | null;
+}
+
 export interface PullRequestSummary {
   state: "ready" | "unavailable" | "demo";
   login: string | null;
   total: number;
-  items: {
-    number: number;
-    title: string;
-    repository: string;
-    url: string;
-    isDraft: boolean;
-    reviewDecision: string | null;
-    updatedAt: string;
-  }[];
+  items: PullRequestItem[];
   checkedAt: string | null;
   error: string | null;
   allUrl: string | null;
+  reviewRequestTotal?: number;
+  reviewRequests?: PullRequestItem[] | null;
+  reviewRequestsUrl?: string | null;
+}
+
+export interface UnpushedBranch {
+  repository: string;
+  checkout: string;
+  branch: string;
+  state: "ahead" | "never_pushed";
+  lastCommitAt: string;
+}
+
+export interface LocalOpenLoops {
+  branches: UnpushedBranch[];
+  drafts: EvidenceRecord[];
+  checkedAt: string;
 }
 
 export interface QueryResult {

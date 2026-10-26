@@ -8,7 +8,7 @@ import {
 import type { AppSnapshot, EvidenceRecord } from "./bridge";
 import { RecordRow, SectionHeader, type EvidenceLookup } from "./EvidenceRows";
 import { Empty, SourceHealth } from "./presentation";
-import PullRequestsPanel from "./PullRequestsPanel";
+import OpenLoopsPanel from "./OpenLoopsPanel";
 import LiveIndexStats from "./LiveIndexStats";
 
 export default function OverviewView({
@@ -67,7 +67,7 @@ export default function OverviewView({
       <LiveIndexStats snapshot={snapshot} />
       <div className="dashboard-grid">
         <div className="dashboard-main">
-          <PullRequestsPanel mode={snapshot.mode} />
+          <OpenLoopsPanel mode={snapshot.mode} lookup={lookup} />
           <section className="panel recent-panel">
             <SectionHeader
               label="Recent conversation activity"

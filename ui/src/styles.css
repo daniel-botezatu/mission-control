@@ -2834,6 +2834,14 @@ h1 {
 .pull-request-main small { display: block; color: var(--subtle); margin-top: 5px; font-size: 11px; }
 .pr-open { color: var(--green); flex-shrink: 0; }
 .pr-draft { color: var(--muted); flex-shrink: 0; }
+.open-loops-group > h3 { display: flex; align-items: center; gap: 6px; margin: 0; padding: 12px 20px 8px; border-top: 1px solid var(--border); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--subtle); }
+.open-loops-group > h3 > span { font-variant-numeric: tabular-nums; color: var(--muted); }
+.open-loops-group > .pull-request-row:first-of-type { border-top: 0; }
+.open-loops-group > .record-row { border-top: 1px solid var(--border); }
+.open-loops-more { display: flex; align-items: center; gap: 5px; width: 100%; padding: 8px 20px 12px; border: 0; background: transparent; text-align: left; font-size: 11px; color: var(--subtle); }
+button.open-loops-more:hover { color: var(--text); }
+div.pull-request-row:hover { background: transparent; }
+.open-loops-panel > .small-empty { border-top: 1px solid var(--border); }
 .pull-requests-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding: 12px 20px; color: var(--subtle); }
 .timeline-order { display: inline-flex; align-items: center; gap: 8px; color: var(--subtle); flex: 1; padding: 9px 0; }
 .timeline-day > h2 { padding: 18px 22px 10px; margin: 0; font-size: 12px; font-weight: 600; color: var(--subtle); }

@@ -179,7 +179,7 @@ public sealed class GitWorkspaceDiscovery(IReadOnlyList<string>? excludedRoots =
         catch (Exception error) when (IsFileError(error)) { return null; }
     }
 
-    private static bool HasSafeAncestors(string path)
+    internal static bool HasSafeAncestors(string path)
     {
         try
         {
@@ -246,6 +246,30 @@ public sealed class GitWorkspaceDiscovery(IReadOnlyList<string>? excludedRoots =
         return new(checkout, aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
+    /// <summary>The metadata directory a checkout shares with its worktrees (its .git, or the main repository's); null when missing or unsafe.</summary>
+    internal static string? CommonDirectory(string checkout)
+    {
+        try
+        {
+            var marker = Path.Combine(checkout, ".git");
+            if (!HasSafeAncestors(marker)) return null;
+            var gitDirectory = marker;
+            if (File.Exists(marker))
+            {
+                var pointer = ReadBounded(marker, MaximumPointerBytes)?.Trim();
+                if (pointer is null || !pointer.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase) || pointer.Contains('\n') || pointer.Contains('\r')) return null;
+                gitDirectory = ResolveMetadataPath(checkout, pointer[7..].Trim()) ?? "";
+            }
+            if (!Directory.Exists(gitDirectory) || !HasSafeAncestors(gitDirectory)) return null;
+            var commonFile = Path.Combine(gitDirectory, "commondir");
+            if (!File.Exists(commonFile)) return gitDirectory;
+            var common = ReadBounded(commonFile, MaximumPointerBytes)?.Trim();
+            var commonDirectory = common is null || common.Contains('\n') || common.Contains('\r') ? null : ResolveMetadataPath(gitDirectory, common);
+            return commonDirectory is not null && Directory.Exists(commonDirectory) && HasSafeAncestors(commonDirectory) ? commonDirectory : null;
+        }
+        catch (Exception error) when (IsFileError(error)) { return null; }
+    }
+
     private static string? ResolveMetadataPath(string basePath, string pointer)
     {
         if (string.IsNullOrWhiteSpace(pointer)) return null;
@@ -253,7 +277,7 @@ public sealed class GitWorkspaceDiscovery(IReadOnlyList<string>? excludedRoots =
         catch (Exception error) when (IsFileError(error)) { return null; }
     }
 
-    private static string? ReadBounded(string path, int maximumBytes)
+    internal static string? ReadBounded(string path, int maximumBytes)
     {
         if (!HasSafeAncestors(path)) return null;
         using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -297,14 +321,14 @@ public sealed class GitWorkspaceDiscovery(IReadOnlyList<string>? excludedRoots =
         }
     }
 
-    private static bool HasContinuation(string line)
+    internal static bool HasContinuation(string line)
     {
         var count = 0;
         for (var index = line.Length - 1; index >= 0 && line[index] == '\\'; index--) count++;
         return count % 2 == 1;
     }
 
-    private static string? ReadConfigValue(string value)
+    internal static string? ReadConfigValue(string value)
     {
         var result = new StringBuilder();
         var quoted = false;
@@ -344,5 +368,5 @@ public sealed class GitWorkspaceDiscovery(IReadOnlyList<string>? excludedRoots =
         return $"{segments[0]}/{segments[1]}".ToLowerInvariant();
     }
 
-    private static bool IsFileError(Exception error) => error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException;
+    internal static bool IsFileError(Exception error) => error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException;
 }

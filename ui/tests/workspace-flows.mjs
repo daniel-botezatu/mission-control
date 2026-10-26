@@ -182,6 +182,8 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
               isDraft: false,
               reviewDecision: "REVIEW_REQUIRED",
               updatedAt: "2026-10-21T09:00:00Z",
+              status: "review_required",
+              loop: "others",
             },
             {
               number: 43,
@@ -191,9 +193,41 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
               isDraft: true,
               reviewDecision: null,
               updatedAt: "2026-10-20T09:00:00Z",
+              status: "draft",
+              loop: "you",
+            },
+          ],
+          reviewRequestTotal: 1,
+          reviewRequestsUrl: "https://github.com/search?type=pullrequests&q=review",
+          reviewRequests: [
+            {
+              number: 7,
+              title: "Please review the importer",
+              repository: "example/other",
+              url: "https://github.com/example/other/pull/7",
+              isDraft: false,
+              reviewDecision: null,
+              updatedAt: "2026-10-21T08:00:00Z",
+              status: "review_requested",
+              loop: "you",
+              author: "colleague",
             },
           ],
         };
+  if (method === "openLoops.local")
+    return {
+      checkedAt: "2026-10-21T10:00:00Z",
+      branches: [
+        {
+          repository: "example/project",
+          checkout: "C:/work/project",
+          branch: "fix/unpushed-work",
+          state: "ahead",
+          lastCommitAt: "2026-10-21T09:30:00Z",
+        },
+      ],
+      drafts: [],
+    };
   if (method === "pullRequests.open") return { opened: true };
   if (method === "snapshot")
     return {
@@ -422,16 +456,28 @@ try {
     },
   );
   await check(
-    "Overview shows authored PRs, opens GitHub, and distinguishes unavailable from empty",
+    "Overview shows open loops, opens GitHub, and distinguishes unavailable from empty",
     async () => {
       await nav("Overview");
-      const panel = page.getByRole("region", {
-        name: "Your open pull requests",
-      });
+      const panel = page.getByRole("region", { name: "Open loops" });
       await panel
         .getByText("Fix response serialization", { exact: true })
         .waitFor();
-      assert.ok((await panel.innerText()).includes("Authored by developer"));
+      assert.ok((await panel.innerText()).includes("GitHub as developer"));
+      const onYou = panel.getByRole("group", { name: "On you" });
+      assert.deepEqual(
+        await onYou.locator(".pull-request-main strong").allInnerTexts(),
+        ["Please review the importer", "Draft follow-up"],
+      );
+      await panel
+        .getByRole("group", { name: "Waiting on others" })
+        .getByText("Fix response serialization", { exact: true })
+        .waitFor();
+      await panel
+        .getByRole("group", { name: "Not pushed" })
+        .getByText("fix/unpushed-work", { exact: true })
+        .waitFor();
+      assert.equal(await panel.getByRole("group", { name: "Drafts not sent" }).count(), 0);
       await panel
         .getByRole("button", { name: /Fix response serialization/ })
         .click();
@@ -443,7 +489,7 @@ try {
       );
       prUnavailable = true;
       await panel
-        .getByRole("button", { name: "Refresh pull requests" })
+        .getByRole("button", { name: "Refresh open loops" })
         .click();
       await panel
         .getByText("GitHub could not be reached. Refresh to try again.")
@@ -451,7 +497,7 @@ try {
       assert.ok(!(await panel.innerText()).includes("no open pull requests"));
       prUnavailable = false;
       await panel
-        .getByRole("button", { name: "Refresh pull requests" })
+        .getByRole("button", { name: "Refresh open loops" })
         .click();
       await panel
         .getByText("Fix response serialization", { exact: true })

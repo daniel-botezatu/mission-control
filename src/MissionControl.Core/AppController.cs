@@ -62,6 +62,7 @@ public sealed class AppController : IAsyncDisposable
             case "snapshot": return await Task.Run(() => Store.Snapshot(mode, Observer.MonitoringState));
             case "collection.stats": return await Task.Run(() => Store.Statistics(mode, Observer.MonitoringState));
             case "projects": return Store.GetProjects();
+            case "openLoops.local": return await Task.Run(() => LocalOpenLoops(DateTimeOffset.UtcNow));
             case "sources": return Store.GetSources();
             case "query": return await Task.Run(() => Store.Query(Query(args), previews: true));
             case "sessions": return await Task.Run(() => Store.QuerySessions(Query(args)));
@@ -160,6 +161,14 @@ public sealed class AppController : IAsyncDisposable
     private Task StopCollectorsAsync() => Task.WhenAll(demoObserver.PauseAsync(), liveObserver.PauseAsync(), demoProjects.PauseAsync(), liveProjects.PauseAsync());
     private void NotifyChanged() => SourceChanged?.Invoke();
     private int IntSetting(string key, int fallback) => int.TryParse(Store.GetSetting(key), out var value) ? value : fallback;
+
+    /// <summary>Read on request only: unpushed branches of approved projects' repositories and drafts left unsent.</summary>
+    private object LocalOpenLoops(DateTimeOffset now)
+    {
+        var repositories = Store.GetProjects().Where(project => project.IsApproved).SelectMany(project => project.Repositories ?? []).ToArray();
+        return new { branches = GitBranchLoops.Read(repositories, now, TimeSpan.FromDays(30)), drafts = Store.UnsentDrafts(now.AddDays(-7), 5), checkedAt = now.ToString("O") };
+    }
+
     private object? RecordPage(JsonElement args)
     {
         var record = Store.GetRecord(Required(args, "id"));

@@ -59,16 +59,25 @@ try {
       .locator(".sidebar .nav-item")
       .filter({ hasText: /^Overview$/ })
       .click();
-    const panel = page.getByRole("region", { name: "Your open pull requests" });
+    const panel = page.getByRole("region", { name: "Open loops" });
     await panel
-      .getByText(`Authored by ${data.login} · all repositories`, {
-        exact: true,
-      })
+      .getByText(`GitHub as ${data.login}`, { exact: false })
       .waitFor();
+    // Each group shows up to five pull requests; review requests count as "on you".
+    const all = [...(data.reviewRequests ?? []), ...data.items];
+    const shown =
+      Math.min(5, all.filter((pr) => pr.loop === "you").length) +
+      Math.min(5, all.filter((pr) => pr.loop !== "you").length);
+    await panel
+      .locator('.pull-request-row[data-kind="pr"]')
+      .first()
+      .waitFor({ state: shown ? "visible" : "detached" });
     assert.equal(
-      await panel.locator(".pull-request-row").count(),
-      Math.min(6, data.items.length),
+      await panel.locator('.pull-request-row[data-kind="pr"]').count(),
+      shown,
     );
+    const local = await rpc("openLoops.local");
+    assert.ok(Array.isArray(local.branches) && Array.isArray(local.drafts));
     const started = Date.now();
     await rpc("control", { action: "refresh" });
     const refreshMs = Date.now() - started;
@@ -81,7 +90,10 @@ try {
       passed: true,
       githubCliReadVerified: true,
       total: data.total,
-      shown: Math.min(6, data.items.length),
+      shown,
+      reviewRequests: data.reviewRequestTotal,
+      unpushedBranches: local.branches.length,
+      unsentDrafts: local.drafts.length,
       refreshMs,
       demoMakesNoRequest: true,
       untrustedLinkRejected: true,

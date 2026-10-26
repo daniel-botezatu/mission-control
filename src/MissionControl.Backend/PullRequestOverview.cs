@@ -5,8 +5,10 @@ using System.Text.RegularExpressions;
 
 namespace MissionControl.Backend;
 
-internal sealed record PullRequestItem(int Number, string Title, string Repository, string Url, bool IsDraft, string? ReviewDecision, string UpdatedAt);
-internal sealed record PullRequestSummary(string State, string? Login, int Total, IReadOnlyList<PullRequestItem> Items, string? CheckedAt, string? Error, string? AllUrl);
+/// <summary>Status says what holds the pull request up; Loop says whose move it is: "you" or "others".</summary>
+internal sealed record PullRequestItem(int Number, string Title, string Repository, string Url, bool IsDraft, string? ReviewDecision, string UpdatedAt, string Status = "open", string Loop = "others", string? Author = null);
+internal sealed record PullRequestSummary(string State, string? Login, int Total, IReadOnlyList<PullRequestItem> Items, string? CheckedAt, string? Error, string? AllUrl,
+    int ReviewRequestTotal = 0, IReadOnlyList<PullRequestItem>? ReviewRequests = null, string? ReviewRequestsUrl = null);
 internal interface IGitHubOverviewReader { Task<string> ReadAsync(CancellationToken token); }
 
 /// <summary>A desktop-only, on-demand read through the user's official CLI. Never writes workspace data.</summary>
@@ -57,24 +59,57 @@ internal sealed class PullRequestOverview(IGitHubOverviewReader? reader = null, 
         var items = new List<PullRequestItem>();
         foreach (var node in nodes.EnumerateArray())
         {
-            var number = node.GetProperty("number").GetInt32();
-            var repository = node.GetProperty("repository").GetProperty("nameWithOwner").GetString() ?? "";
-            var url = node.GetProperty("url").GetString() ?? "";
-            if (number < 1 || !Regex.IsMatch(repository, @"\A[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\z")
-                || url != $"https://github.com/{repository}/pull/{number}") throw new InvalidDataException();
-            var title = node.GetProperty("title").GetString() ?? "";
-            var updated = node.GetProperty("updatedAt").GetString() ?? "";
-            if (title.Length > 2048 || !DateTimeOffset.TryParse(updated, out _)) throw new InvalidDataException();
-            items.Add(new(number, title, repository, url, node.GetProperty("isDraft").GetBoolean(), node.GetProperty("reviewDecision").GetString(), updated));
+            var decision = node.GetProperty("reviewDecision").GetString();
+            var checks = node.GetProperty("commits").GetProperty("nodes").EnumerateArray().Select(commit => commit.GetProperty("commit").GetProperty("statusCheckRollup"))
+                .Select(rollup => rollup.ValueKind == JsonValueKind.Object ? rollup.GetProperty("state").GetString() : null).LastOrDefault();
+            var (status, loop) = Classify(node.GetProperty("isDraft").GetBoolean(), decision, node.GetProperty("mergeable").GetString(), checks);
+            items.Add(Item(node, decision, status, loop, null));
+        }
+        var requested = root.GetProperty("data").GetProperty("reviewRequests");
+        var requestTotal = requested.GetProperty("issueCount").GetInt32();
+        var requestNodes = requested.GetProperty("nodes");
+        if (requestTotal < 0 || requestNodes.GetArrayLength() > 20) throw new InvalidDataException();
+        var requests = new List<PullRequestItem>();
+        // Search results that are not pull requests arrive as empty objects.
+        foreach (var node in requestNodes.EnumerateArray().Where(node => node.ValueKind == JsonValueKind.Object && node.TryGetProperty("number", out _)))
+        {
+            var author = node.GetProperty("author") is { ValueKind: JsonValueKind.Object } who ? who.GetProperty("login").GetString() : null;
+            requests.Add(Item(node, null, "review_requested", "you", author is not null && Regex.IsMatch(author, @"\A[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\[bot\])?\z") ? author : "ghost"));
         }
         var all = "https://github.com/search?type=pullrequests&q=" + Uri.EscapeDataString($"is:pr is:open author:{login}");
-        return new("ready", login, total, items, checkedAt.ToString("O"), null, all);
+        var reviews = "https://github.com/search?type=pullrequests&q=" + Uri.EscapeDataString($"is:pr is:open archived:false review-requested:{login}");
+        return new("ready", login, total, items, checkedAt.ToString("O"), null, all, requestTotal, requests, reviews);
+    }
+
+    /// <summary>The first thing holding a pull request up, and whose move it is.</summary>
+    internal static (string Status, string Loop) Classify(bool draft, string? decision, string? mergeable, string? checks) =>
+        draft ? ("draft", "you")
+        : decision == "CHANGES_REQUESTED" ? ("changes_requested", "you")
+        : mergeable == "CONFLICTING" ? ("conflict", "you")
+        : checks is "FAILURE" or "ERROR" ? ("checks_failing", "you")
+        : decision == "APPROVED" ? ("approved", "you")
+        : decision == "REVIEW_REQUIRED" ? ("review_required", "others")
+        // No required review: nothing blocks it, so it waits on someone choosing to review or merge.
+        : ("open", "others");
+
+    private static PullRequestItem Item(JsonElement node, string? decision, string status, string loop, string? author)
+    {
+        var number = node.GetProperty("number").GetInt32();
+        var repository = node.GetProperty("repository").GetProperty("nameWithOwner").GetString() ?? "";
+        var url = node.GetProperty("url").GetString() ?? "";
+        if (number < 1 || !Regex.IsMatch(repository, @"\A[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\z")
+            || url != $"https://github.com/{repository}/pull/{number}") throw new InvalidDataException();
+        var title = node.GetProperty("title").GetString() ?? "";
+        var updated = node.GetProperty("updatedAt").GetString() ?? "";
+        if (title.Length > 2048 || !DateTimeOffset.TryParse(updated, out _)) throw new InvalidDataException();
+        return new(number, title, repository, url, node.GetProperty("isDraft").GetBoolean(), decision, updated, status, loop, author);
     }
 
     public Uri ResolveLink(string? value)
     {
         var cached = _cached;
-        if (cached?.State != "ready" || value is null || value != cached.AllUrl && !cached.Items.Any(item => item.Url == value))
+        if (cached?.State != "ready" || value is null
+            || value != cached.AllUrl && value != cached.ReviewRequestsUrl && !cached.Items.Concat(cached.ReviewRequests ?? []).Any(item => item.Url == value))
             throw new ArgumentException("Choose a pull request from your loaded overview.");
         return new Uri(value);
     }
@@ -87,7 +122,8 @@ internal sealed class GitHubOverviewException(string message) : Exception(messag
 
 internal sealed class GitHubOverviewReader(Func<string?>? configuredPath = null) : IGitHubOverviewReader
 {
-    internal const string Query = "query MissionControlOpenPullRequests { viewer { login pullRequests(first:20, states:OPEN, orderBy:{field:UPDATED_AT,direction:DESC}) { totalCount nodes { number title url isDraft reviewDecision updatedAt repository { nameWithOwner } } } } }";
+    internal const string Query = "query MissionControlOpenLoops { viewer { login pullRequests(first:20, states:OPEN, orderBy:{field:UPDATED_AT,direction:DESC}) { totalCount nodes { number title url isDraft reviewDecision mergeable updatedAt repository { nameWithOwner } commits(last:1) { nodes { commit { statusCheckRollup { state } } } } } } } "
+        + "reviewRequests: search(type:ISSUE, first:20, query:\"is:pr is:open archived:false review-requested:@me\") { issueCount nodes { ... on PullRequest { number title url isDraft updatedAt repository { nameWithOwner } author { login } } } } }";
 
     internal static string Executable(string? configured = null, bool? macOS = null, Func<string, bool>? exists = null)
     {
