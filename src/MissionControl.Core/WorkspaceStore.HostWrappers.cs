@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 
+using Microsoft.Data.Sqlite;
+
 namespace MissionControl.Core;
 
 public sealed partial class WorkspaceStore
@@ -50,6 +52,40 @@ public sealed partial class WorkspaceStore
             ("$key", HostWrapperRepairKey), ("$value", HostWrapperRepairVersion));
         transaction.Commit();
         return (stale.Count, reviews.Count);
+    }
+
+    /// <summary>
+    /// Removes final replies of one stream that a re-read has re-emitted under a new identity: same source
+    /// message (sourceRecordId), older ingestion. Annotations move to the replacement when it has none.
+    /// </summary>
+    public int RemoveSupersededFinals(string sourceId, string streamId)
+    {
+        lock (gate)
+        {
+            const string Superseded = """
+                SELECT e.id AS stale,
+                    (SELECT n.id FROM evidence n WHERE n.source_id=e.source_id AND n.stream_id=e.stream_id AND n.kind='message' AND n.author='assistant'
+                        AND n.id<>e.id AND json_valid(n.data_json) AND json_extract(n.data_json,'$.sourceRecordId')=json_extract(e.data_json,'$.sourceRecordId')
+                        AND n.ingested_at>e.ingested_at ORDER BY n.ingested_at DESC LIMIT 1) AS replacement
+                FROM evidence e
+                WHERE e.source_id=$source AND e.stream_id=$stream AND e.kind='message' AND e.author='assistant' AND json_valid(e.data_json)
+                """;
+            var pairs = new List<(string Stale, string Replacement)>();
+            using (var command = Command(Superseded, ("$source", sourceId), ("$stream", streamId)))
+            using (var reader = command.ExecuteReader())
+                while (reader.Read())
+                    if (!reader.IsDBNull(1)) pairs.Add((reader.GetString(0), reader.GetString(1)));
+            if (pairs.Count == 0) return 0;
+            using var transaction = connection.BeginTransaction();
+            foreach (var (stale, replacement) in pairs)
+            {
+                ProjectExecute(transaction, "UPDATE corrections SET record_id=$new WHERE record_id=$old AND NOT EXISTS(SELECT 1 FROM corrections WHERE record_id=$new)", ("$new", replacement), ("$old", stale));
+                ProjectExecute(transaction, "DELETE FROM evidence WHERE id=$id", ("$id", stale));
+            }
+            Invalidate(transaction);
+            transaction.Commit();
+            return pairs.Count;
+        }
     }
 
     private object? ProjectScalar(Microsoft.Data.Sqlite.SqliteTransaction transaction, string sql, params (string, object?)[] parameters)

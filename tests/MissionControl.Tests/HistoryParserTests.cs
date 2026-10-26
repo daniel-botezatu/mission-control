@@ -58,7 +58,6 @@ public sealed class HistoryParserTests
             ClaudeTool(f.Cwd), Claude("assistant", "a-2", f.Cwd, "Final answer kept through a restart"));
         await f.Run();
         Assert.Single(f.Messages());
-        Assert.DoesNotContain("I will inspect first", f.CheckpointText());
         Assert.Contains("Final answer kept through a restart", f.CheckpointText());
         await f.Append(new { type = "system", subtype = "turn_duration", sessionId = "s", cwd = f.Cwd, timestamp = Now, uuid = "duration" });
         await f.Run();
@@ -66,6 +65,8 @@ public sealed class HistoryParserTests
         Assert.Equal("Final answer kept through a restart", final.Body);
         Assert.Equal("u-1", JsonDocument.Parse(final.DataJson!).RootElement.GetProperty("turnId").GetString());
         Assert.DoesNotContain("Final answer kept through a restart", f.CheckpointText());
+        // An update superseded by a tool call is held only while the turn could still be interrupted.
+        Assert.DoesNotContain("I will inspect first", f.CheckpointText());
         await f.Run();
         Assert.Equal(2, f.Messages().Count);
     }
@@ -161,24 +162,28 @@ public sealed class HistoryParserTests
     }
 
     [Fact]
-    public async Task CodexInterruptionIsObservedWithoutCompletionOrToolText()
+    public async Task CodexInterruptionKeepsTheLastUpdateMarkedAsInterrupted()
     {
         using var f = new Fixture("codex");
         await f.Append(Header(f.Cwd), Event("task_started", "turn-abort"), User("Try migration"), Response("assistant", "Working", "commentary"), Event("turn_aborted", "turn-abort"));
         await f.Run();
-        Assert.DoesNotContain(f.Messages(), r => r.Author == "assistant");
+        var last = Assert.Single(f.Messages(), r => r.Author == "assistant");
+        Assert.Equal("[Interrupted before the turn finished; the assistant's last update]\nWorking", last.Body);
+        Assert.Equal("interrupted", JsonDocument.Parse(last.DataJson!).RootElement.GetProperty("finalSource").GetString());
         Assert.Contains(f.Store.Query(new(Limit: 100)).Records, r => r.State == "last-observed: turn_aborted");
     }
 
     [Fact]
-    public async Task ClaudeInterruptionDoesNotPromoteCommentaryWhenTheNextUserArrives()
+    public async Task ClaudeInterruptionKeepsTheLastUpdateMarkedAsInterrupted()
     {
         using var f = new Fixture("claude");
         await f.Append(Claude("user", "u1", f.Cwd, "Start"), Claude("assistant", "a1", f.Cwd, "UNFINISHED_COMMENTARY"),
             Claude("user", "interrupt", f.Cwd, "[Request interrupted by user]"), Claude("user", "u2", f.Cwd, "Different task"));
         await f.Run();
-        Assert.Equal(2, f.Messages().Count);
-        Assert.DoesNotContain(f.Messages(), r => r.Author == "assistant");
+        Assert.Equal(3, f.Messages().Count);
+        var last = Assert.Single(f.Messages(), r => r.Author == "assistant");
+        Assert.StartsWith("[Interrupted before the turn finished", last.Body);
+        Assert.Contains("UNFINISHED_COMMENTARY", last.Body);
         Assert.DoesNotContain("UNFINISHED_COMMENTARY", f.CheckpointText());
         Assert.Contains(f.Store.Query(new(Limit: 100)).Records, r => r.State == "last-observed: turn_aborted");
     }

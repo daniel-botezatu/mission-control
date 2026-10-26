@@ -136,8 +136,12 @@ public sealed partial class WorkspaceStore
                 if (project is null || !IsProjectApprovedUnsafe(project, transaction)
                     || pendingProject != project || !PrivacyPathWithin(pendingCwd, cwd)) data.Remove(property);
             }
+            // An interrupted turn's last update and pending tool facts are kept only for approved projects.
+            if (project is null || !IsProjectApprovedUnsafe(project, transaction))
+                foreach (var property in data.Select(p => p.Key).Where(key => key.Equals("lastUpdate", StringComparison.OrdinalIgnoreCase) || key.Equals("pendingFacts", StringComparison.OrdinalIgnoreCase)).ToArray())
+                    data.Remove(property);
             // Persist parser state only, never arbitrary payload fields supplied to a checkpoint.
-            var fields = new HashSet<string>(["parserVersion","replayBelow","lookbackDays","includeSubagents","session","cwd","branch","version","timestamp","gap","approvedHistory","subagent","turn","finalEmitted","turnCompleted","pendingAssistant","discarding","waitingForTail","creationTicks","compressedLength","compressedTicks","historyBaseThread","historyBaseOffset","historyBaseOutsideLookback"], StringComparer.OrdinalIgnoreCase);
+            var fields = new HashSet<string>(["parserVersion","replayBelow","lookbackDays","includeSubagents","session","cwd","branch","version","timestamp","gap","approvedHistory","subagent","turn","finalEmitted","turnCompleted","pendingAssistant","discarding","waitingForTail","creationTicks","compressedLength","compressedTicks","historyBaseThread","historyBaseOffset","historyBaseOutsideLookback","lastUpdate","pendingFacts"], StringComparer.OrdinalIgnoreCase);
             foreach (var key in data.Select(p => p.Key).Where(key => !fields.Contains(key)).ToArray()) data.Remove(key);
             // Parser state must survive a long pending final. The generic
             // 12 KiB evidence-metadata limit used to replace this entire object
