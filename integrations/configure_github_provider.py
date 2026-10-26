@@ -55,6 +55,12 @@ def recognize(current, proposed, args):
     if current.get("command") == proposed["command"] and current.get("args") == proposed["args"]:
         return
     command = current.get("command")
+    # A launcher upgrade: the same gh, pinned server and checksum, run from another version folder of the same
+    # providers install (providers/mission-control/<version>/).
+    if isinstance(command, str) and current.get("args") == proposed["args"]:
+        existing, launcher = manage.absolute(command, "Existing launcher"), Path(proposed["command"])
+        if existing.name.lower() == launcher.name.lower() and existing.parent.parent == launcher.parent.parent and existing.parent != launcher.parent:
+            return
     if not isinstance(command, str) or manage.absolute(command, "Existing server") != manage.absolute(args.server, "Pinned server"):
         raise ValueError("Existing GitHub command is not the recognized official local server")
     expected = ["stdio", "--read-only", "--toolsets=", "--tools=" + ",".join(TOOLS)]

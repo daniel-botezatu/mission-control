@@ -114,6 +114,47 @@ class GitHubProviderConfigurationTests(unittest.TestCase):
         self.assertEqual(provider.replacement(args), actual["servers"]["mc_github"])
         self.assertEqual(state["servers"]["mc_slack"], actual["servers"]["mc_slack"])
 
+    def launcher_versions(self):
+        for version in ["0.4.8", "0.4.14"]:
+            folder = self.root / "providers" / "mission-control" / version
+            folder.mkdir(parents=True)
+            (folder / ("mission-control-providers" + self.extension)).write_bytes(b"synthetic-not-executable")
+        return [str(self.root / "providers" / "mission-control" / version / ("mission-control-providers" + self.extension)) for version in ["0.4.8", "0.4.14"]]
+
+    def test_upgrades_a_launcher_from_another_version_folder_in_both_hosts(self):
+        older, newer = self.launcher_versions()
+        for host in ["claude", "codex"]:
+            with self.subTest(host=host):
+                args = self.write(host)
+                args.launcher = older
+                provider.configure(args)
+                args.launcher = newer
+                provider.configure(args)
+                key = "mcpServers" if host == "claude" else "mcp_servers"
+                self.assertEqual(newer, self.read(args)[key]["mc_github"]["command"])
+
+    def test_launcher_upgrade_refuses_other_folders_or_changed_arguments(self):
+        older, newer = self.launcher_versions()
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / ("mission-control-providers" + self.extension)).write_bytes(b"synthetic-not-executable")
+        for command, args_change in [(str(elsewhere / ("mission-control-providers" + self.extension)), None), (older, ["github", "--gh-executable", "other"])]:
+            with self.subTest(command=command, changed=args_change is not None):
+                args = self.write("claude")
+                args.launcher = older
+                provider.configure(args)
+                target = Path(args.target)
+                document = self.read(args)
+                document["mcpServers"]["mc_github"]["command"] = command
+                if args_change:
+                    document["mcpServers"]["mc_github"]["args"] = args_change
+                target.write_text(json.dumps(document), encoding="utf-8")
+                before = target.read_bytes()
+                args.launcher = newer
+                with self.assertRaises(ValueError):
+                    provider.configure(args)
+                self.assertEqual(before, target.read_bytes())
+
     def test_refuses_credentials_or_unrecognized_command_and_leaves_file_exact(self):
         for change in [{"env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "synthetic-secret"}}, {"headers": {"Authorization": "synthetic-secret"}}, {"command": "unknown.exe"}, {"args": ["stdio", "--tools=create_issue"]}]:
             with self.subTest(change=list(change)):
