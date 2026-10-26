@@ -123,7 +123,7 @@ def prepare(args):
     workflow += "\nSaved Slack search preference: " + {
         "allow": "The user has explicitly authorised relevant private-channel and DM searches for work recaps. Reuse this permission; do not ask again. Keep searches relevant to the requested work and dates. This never authorises sending messages.",
         "public": "Search public channels only; do not search private channels or DMs.",
-        "ask": "Private channels and DMs need the user's permission. Ask in the parent conversation before invoking the restricted reader; pass the answer with the recap request. If permission is absent, report public-only Slack scope."
+        "ask": "Private channels and DMs need the user's permission, and the recap runs in a fresh helper that cannot ask. Search them only when the request itself grants it (for example 'include private Slack'); otherwise search public channels only and say private Slack was not searched."
     }[preference] + "\n"
     files = {}
     local = {"command": str(mcp), "args": ["--data-dir", str(data), "--live", "--time-zone", time_zone]}
@@ -144,7 +144,7 @@ def prepare(args):
     if args.slack_client_id:
         external["mcpServers"]["mc_slack"] = slack
     claude_prefixes = [("mission-control", "history"), ("plugin_mission-control_history", "history"), ("mc_github", "github"), ("plugin_github_github", "github"), ("github", "github"),
-                       ("mc_slack", "slack"), ("slack", "slack"), ("plugin_slack_slack", "slack")]
+                       ("mc_slack", "slack"), ("slack", "slack"), ("plugin_slack_slack", "slack"), ("claude_ai_Slack", "slack")]
     claude_tools = ["ToolSearch"] + ["mcp__" + prefix + "__" + tool for prefix, group in claude_prefixes for tool in TOOLS[group]]
     for host in ["claude", "codex"]:
         base = host + "/"
@@ -157,6 +157,12 @@ def prepare(args):
             files[base + "agents/memory-reader.md"] = (
                 "---\nname: memory-reader\ndescription: Read approved developer history and linked work evidence without actions.\n"
                 + "tools: " + ", ".join(t for t in claude_tools if t == "ToolSearch" or any(t.endswith("__" + name) for name in TOOLS["history"])) + "\ndisallowedTools: Bash, Write, Edit, NotebookEdit, Agent, Task, Skill\n---\n\n" + workflow + "\n" + (ROOT / "shared/recap-reader.md").read_text(encoding="utf-8"))
+            # Recaps run in this fresh coordinator so their cost does not grow with the user's chat. It may
+            # start helpers (the restricted readers); everything else it can do is read-only.
+            files[base + "agents/recap-coordinator.md"] = (
+                "---\nname: recap-coordinator\ndescription: Coordinate a developer-memory recap in a fresh context with restricted readers and read-only work sources.\n"
+                + "tools: " + ", ".join(["Agent"] + claude_tools) + "\ndisallowedTools: Bash, Write, Edit, NotebookEdit, Skill\n---\n\n"
+                + workflow + "\n" + (ROOT / "shared/recap-coordinator.md").read_text(encoding="utf-8"))
             # Slack results reach the AI directly. This hook applies Mission Control's secret filter to
             # them first, for every Slack server name (official plugin, claude.ai connector, internal app).
             files[base + "hooks/hooks.json"] = dump({"description": "Mission Control: remove secret-looking values from Slack results before the AI sees them.",
@@ -179,9 +185,12 @@ def prepare(args):
                 "source": {"source": "local", "path": "./"}, "policy": {"installation": "AVAILABLE"}}]})
             headers = ""
         files[base + ".mcp.json"] = dump(mcp_config)
+        fork = "context: fork\nagent: mission-control:recap-coordinator\nbackground: false\n" if host == "claude" else ""
         files[base + "skills/developer-memory/SKILL.md"] = (
             "---\nname: developer-memory\ndescription: Recall work, decisions, promises, and unfinished tasks from approved coding history and connected work sources.\n"
-            + headers + "---\n\n" + workflow + "\n" + ((ROOT / "shared/recap-coordinator.md").read_text(encoding="utf-8") + "\nRequest: $ARGUMENTS\n" if host == "claude" else "Codex fallback: use the single full-message stream above for recaps. Codex supports parallel agents, but this installation does not provide a verified per-reader tool allowlist. Do not substitute a general-purpose helper or claim instructions alone enforce read-only access. Do not use an outline. Do not run CLI helpers, write ledgers, or change host permissions during recall.\n"))
+            # Claude runs this skill inside the coordinator agent, which already carries the workflow;
+            # repeating it here would put it in that context twice.
+            + fork + headers + "---\n\n" + ("Answer the request below as the recap coordinator described in your instructions, and return the finished answer as your final message.\n\nRequest: $ARGUMENTS\n" if host == "claude" else workflow + "\n" + "Codex fallback: use the single full-message stream above for recaps. Codex supports parallel agents, but this installation does not provide a verified per-reader tool allowlist. Do not substitute a general-purpose helper or claim instructions alone enforce read-only access. Do not use an outline. Do not run CLI helpers, write ledgers, or change host permissions during recall.\n"))
     files["claude/external.mcp.json"] = dump(external)
     files["claude/read-only-agent-tools.json"] = dump(claude_tools)
     # A fragment is applied with ownership checks; no attempt is made to merge

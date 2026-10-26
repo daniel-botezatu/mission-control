@@ -10,8 +10,14 @@ class InstallerTests(unittest.TestCase):
  def args(self,host): return SimpleNamespace(target=str(self.root/('config.toml' if host=='codex' else '.mcp.json')),host=host,bundle=str(self.bundle))
  def test_hosts_share_workflow_but_have_distinct_registration(self):
   a=(self.bundle/'claude/skills/developer-memory/SKILL.md').read_text(encoding='utf-8'); b=(self.bundle/'codex/skills/developer-memory/SKILL.md').read_text(encoding='utf-8')
-  shared=(Path(__file__).parents[1]/'shared/developer-memory.md').read_text(encoding='utf-8'); self.assertIn(shared,a); self.assertIn(shared,b)
-  self.assertNotIn('context: fork',a); self.assertNotIn('context: fork',b)
+  shared=(Path(__file__).parents[1]/'shared/developer-memory.md').read_text(encoding='utf-8')
+  coordinator=(self.bundle/'claude/agents/recap-coordinator.md').read_text(encoding='utf-8')
+  # Claude runs recaps in a fresh coordinator that carries the workflow once; Codex keeps it in the skill.
+  self.assertIn(shared,coordinator); self.assertNotIn(shared,a); self.assertIn(shared,b)
+  self.assertIn('context: fork\nagent: mission-control:recap-coordinator\nbackground: false',a); self.assertNotIn('context: fork',b)
+  coordinator_header=coordinator.split('---')[1]
+  self.assertIn('tools: Agent, ToolSearch',coordinator_header); self.assertIn('disallowedTools: Bash, Write, Edit, NotebookEdit, Skill',coordinator_header)
+  self.assertNotIn('send_message',coordinator_header)
   agent=(self.bundle/'claude/agents/memory-reader.md').read_text(encoding='utf-8')
   plugin=json.loads((self.bundle/'claude/.claude-plugin/plugin.json').read_text(encoding='utf-8'))
   agent_name=agent.split('name: ',1)[1].splitlines()[0]
