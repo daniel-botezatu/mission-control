@@ -67,7 +67,9 @@ npm ci --prefix ui
 npm run build --prefix ui
 node scripts/build-tauri.mjs
 cargo test --manifest-path src-tauri/Cargo.toml --locked
-python -X utf8 -m unittest discover -s integrations/tests -p test_manage.py
+python -X utf8 -m unittest discover -s integrations/tests -p "test_*.py"
+# Windows, real app: clicks every Settings button in an isolated instance with a new empty data folder
+$env:MC_NATIVE_TEST_DATA_ROOT = "$env:TEMP\mc-settings-buttons-$(Get-Random)"; node ui/tests/settings-buttons.mjs
 powershell -ExecutionPolicy Bypass -File scripts/crash-recovery.ps1
 powershell -ExecutionPolicy Bypass -File scripts/replay-restart.ps1
 ```
