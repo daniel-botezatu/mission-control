@@ -7,6 +7,7 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args is ["filter-tool-output"]) return await FilterToolOutputAsync();
         BoundedLineStream? input = null;
         try
         {
@@ -40,5 +41,24 @@ internal static class Program
                 : "Mission Control MCP could not read the workspace. Open the current Mission Control app to upgrade an older database; newer schemas require a matching MCP build. The MCP process makes no database changes.");
             return 1;
         }
+    }
+
+    // Claude Code PostToolUse hook: removes secret-looking values from results that bypass Mission
+    // Control (such as Slack). It never blocks a result; on any failure the original passes through.
+    private static async Task<int> FilterToolOutputAsync()
+    {
+        try
+        {
+            using var reader = new StreamReader(Console.OpenStandardInput(), System.Text.Encoding.UTF8);
+            var text = await reader.ReadToEndAsync();
+            if (text.Length > ToolOutputFilter.MaximumInputBytes) return 0; // too large to check fully; leave it unchanged
+            if (ToolOutputFilter.Filter(text) is { } reply)
+            {
+                await using var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
+                await output.WriteAsync(reply);
+            }
+        }
+        catch (Exception) { /* fail open: Slack keeps working */ }
+        return 0;
     }
 }

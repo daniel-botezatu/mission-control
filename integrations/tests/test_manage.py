@@ -21,6 +21,14 @@ class InstallerTests(unittest.TestCase):
   self.assertIn('disallowedTools: Bash, Write, Edit, NotebookEdit, Agent, Task, Skill',header)
   tools=json.loads((self.bundle/'claude/read-only-agent-tools.json').read_text(encoding='utf-8')); self.assertFalse(any('send_message' in tool or 'Bash' in tool or 'Edit' in tool for tool in tools))
   config=json.loads((self.bundle/'claude/external.mcp.json').read_text(encoding='utf-8')); self.assertEqual('true',config['mcpServers']['mc_github']['headers']['X-MCP-Readonly'])
+ def test_claude_package_filters_slack_results_with_the_memory_server(self):
+  import re
+  hooks=json.loads((self.bundle/'claude/hooks/hooks.json').read_text(encoding='utf-8'))['hooks']['PostToolUse'][0]
+  for name in ['mcp__claude_ai_Slack__slack_read_thread','mcp__mc_slack__slack_search_public','mcp__plugin_slack_slack__slack_read_channel','mcp__slack__slack_search_public_and_private']:
+   self.assertTrue(re.fullmatch(hooks['matcher'],name),name)
+  self.assertFalse(re.fullmatch(hooks['matcher'],'mcp__plugin_mission-control_history__search_history'))
+  self.assertEqual([str(self.exe)],[hook['command'] for hook in hooks['hooks']]); self.assertEqual(['filter-tool-output'],hooks['hooks'][0]['args'])
+  self.assertFalse((self.bundle/'codex/hooks').exists())
  def test_codex_preserves_unrelated_config_and_roundtrips(self):
   args=self.args('codex'); target=Path(args.target); initial='model = "existing"\n[mcp_servers.other]\ncommand = "existing"\n'; target.write_text(initial)
   manage.modify_config(args); manage.modify_config(args); self.assertIn(initial,target.read_text(encoding='utf-8')); manage.modify_config(args,True); self.assertEqual(initial,target.read_text(encoding='utf-8'))

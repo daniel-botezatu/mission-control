@@ -157,6 +157,11 @@ def prepare(args):
             files[base + "agents/memory-reader.md"] = (
                 "---\nname: memory-reader\ndescription: Read approved developer history and linked work evidence without actions.\n"
                 + "tools: " + ", ".join(t for t in claude_tools if t == "ToolSearch" or any(t.endswith("__" + name) for name in TOOLS["history"])) + "\ndisallowedTools: Bash, Write, Edit, NotebookEdit, Agent, Task, Skill\n---\n\n" + workflow + "\n" + (ROOT / "shared/recap-reader.md").read_text(encoding="utf-8"))
+            # Slack results reach the AI directly. This hook applies Mission Control's secret filter to
+            # them first, for every Slack server name (official plugin, claude.ai connector, internal app).
+            files[base + "hooks/hooks.json"] = dump({"description": "Mission Control: remove secret-looking values from Slack results before the AI sees them.",
+                "hooks": {"PostToolUse": [{"matcher": "mcp__.*[Ss]lack.*", "hooks": [
+                    {"type": "command", "command": str(mcp), "args": ["filter-tool-output"], "timeout": 15}]}]}})
         else:
             overlay = {"name": "mission-control", "version": VERSION, "description": DESCRIPTION,
                 "author": {"name": "Mission Control"}, "skills": "./skills/", "mcpServers": "./.mcp.json",
