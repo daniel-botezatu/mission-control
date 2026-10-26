@@ -3,20 +3,29 @@ using System.Text.RegularExpressions;
 
 namespace MissionControl.Core;
 
-/// <summary>A local branch with work that is not on its remote. State is "ahead" or "never_pushed".</summary>
-public sealed record UnpushedBranch(string Repository, string Checkout, string Branch, string State, string LastCommitAt);
+/// <summary>
+/// A local branch with work that is not on its remote. State is "ahead" (it has a remote branch, and commits no
+/// remote branch has),
+/// "never_pushed" (no remote branch, commits no remote branch has) or "unverified" (it differs from its remote
+/// branch, but the commit history could not be read). Commits counts the unpushed commits when known.
+/// </summary>
+public sealed record UnpushedBranch(string Repository, string Checkout, string Branch, string State, string LastCommitAt, int? Commits = null);
+
+/// <summary>The branches found, newest first, and how many more the limit left out.</summary>
+public sealed record UnpushedBranches(IReadOnlyList<UnpushedBranch> Branches, int Omitted);
 
 /// <summary>
-/// Finds local branches whose work has not been pushed, from Git's own metadata files: refs, packed-refs, the branch
-/// sections of the repository config and the reflogs. Like repository discovery, it never starts Git and never
-/// fetches, so it reports against the remote state of the last fetch or push.
+/// Finds local branches whose work has not been pushed, from Git's own files: refs, packed-refs, the branch sections
+/// of the repository config, the reflogs and the commit history in the object store. Like repository discovery, it
+/// never starts Git and never fetches, so it reports against the remote state of the last fetch or push.
 /// </summary>
 /// <remarks>
-/// Without walking commit history, "ahead" means the branch differs from its remote-tracking branch and moved more
-/// recently than it. A branch that is only behind (moved by a later fetch) is not listed, and neither is a branch
-/// whose remote branch was deleted, which usually follows a merge. "never_pushed" needs the developer's own work in
-/// the reflog, so fetched pull requests and branches only created from another are left out, as are repositories
-/// with no remote at all.
+/// A branch is listed only when commits reachable from it are reachable from no remote branch, as
+/// <c>git rev-list &lt;branch&gt; --not --remotes</c> counts them: a branch that is only behind is not listed; a
+/// diverged one is; one pushed to a differently named remote branch is not. A branch
+/// whose configured remote branch was deleted, which usually follows a merge, is not listed. "never_pushed" also
+/// needs the developer's own work in the reflog, so fetched pull requests and branches only created from another
+/// are left out, as are repositories with no remote at all.
 /// </remarks>
 public static class GitBranchLoops
 {
@@ -29,7 +38,7 @@ public static class GitBranchLoops
     private static readonly Regex Hash = new("^(?:[0-9a-f]{40}|[0-9a-f]{64})$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     private static readonly Regex BranchSection = new("^\\[\\s*branch\\s+\"((?:\\\\.|[^\"\\\\])*)\"\\s*\\]\\s*(?:[#;].*)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
-    public static IReadOnlyList<UnpushedBranch> Read(IEnumerable<ProjectRepository> repositories, DateTimeOffset now, TimeSpan window, CancellationToken token = default)
+    public static UnpushedBranches Read(IEnumerable<ProjectRepository> repositories, DateTimeOffset now, TimeSpan window, CancellationToken token = default)
     {
         var result = new List<(UnpushedBranch Branch, DateTimeOffset At)>();
         var seen = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -42,7 +51,8 @@ public static class GitBranchLoops
             try { result.AddRange(ReadRepository(common, label, repository.LocalRoot, now - window, token)); }
             catch (Exception error) when (GitWorkspaceDiscovery.IsFileError(error) || error is RegexMatchTimeoutException) { }
         }
-        return result.OrderByDescending(item => item.At).Take(MaximumBranches).Select(item => item.Branch).ToArray();
+        var ordered = result.OrderByDescending(item => item.At).Select(item => item.Branch).ToArray();
+        return new(ordered.Take(MaximumBranches).ToArray(), Math.Max(0, ordered.Length - MaximumBranches));
     }
 
     private static IEnumerable<(UnpushedBranch, DateTimeOffset)> ReadRepository(string common, string label, string checkout, DateTimeOffset since, CancellationToken token)
@@ -53,23 +63,38 @@ public static class GitBranchLoops
         if (heads.Count == 0 || remotes.Count == 0) yield break;
         var upstreams = Upstreams(common);
         var remoteHashes = remotes.Values.ToHashSet(StringComparer.Ordinal);
-        foreach (var (branch, hash) in heads)
+        GitCommitGraph? graph = null;
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var local = History(common, "heads/" + branch);
-            if (local.Moved is not { } at || at < since) continue;
-            var configured = upstreams.TryGetValue(branch, out var upstream);
-            var tracking = configured ? upstream : remotes.ContainsKey("origin/" + branch) ? "origin/" + branch : null;
-            if (tracking is not null && remotes.TryGetValue(tracking, out var remoteHash))
+            foreach (var (branch, hash) in heads)
             {
-                if (remoteHash == hash || History(common, "remotes/" + tracking).Moved is { } fetched && fetched >= at) continue;
-                yield return (new(label, checkout, branch, "ahead", at.ToString("O", CultureInfo.InvariantCulture)), at);
+                token.ThrowIfCancellationRequested();
+                var local = History(common, "heads/" + branch);
+                if (local.Moved is not { } at || at < since) continue;
+                var configured = upstreams.TryGetValue(branch, out var upstream);
+                var tracking = configured ? upstream : remotes.ContainsKey("origin/" + branch) ? "origin/" + branch : null;
+                var moved = at.ToString("O", CultureInfo.InvariantCulture);
+                if (tracking is not null && remotes.TryGetValue(tracking, out var remoteHash))
+                {
+                    if (remoteHash == hash) continue;
+                    // Only commits no remote branch has need a push: a branch that is merely behind does not, and
+                    // neither does one tracking main whose work was pushed to its own pull request branch.
+                    var ahead = (graph ??= new(common, hash.Length)).CountOnlyIn(hash, remoteHashes);
+                    if (ahead == 0) continue;
+                    yield return (new(label, checkout, branch, ahead is null ? "unverified" : "ahead", moved, ahead), at);
+                }
+                // A configured upstream that no longer exists was usually deleted after a merge. Branches made by a fetch
+                // (someone's pull request) or only created from another branch hold no work of the developer's own.
+                else if (!configured && tracking is null && local.LocalWork && !remoteHashes.Contains(hash))
+                {
+                    // Commits already on the remote under another branch name were pushed.
+                    var ahead = (graph ??= new(common, hash.Length)).CountOnlyIn(hash, remoteHashes);
+                    if (ahead == 0) continue;
+                    yield return (new(label, checkout, branch, "never_pushed", moved, ahead), at);
+                }
             }
-            // A configured upstream that no longer exists was usually deleted after a merge. Branches made by a fetch
-            // (someone's pull request) or only created from another branch hold no work of the developer's own.
-            else if (!configured && tracking is null && local.LocalWork && !remoteHashes.Contains(hash))
-                yield return (new(label, checkout, branch, "never_pushed", at.ToString("O", CultureInfo.InvariantCulture)), at);
         }
+        finally { graph?.Dispose(); }
     }
 
     /// <summary>Branch name (relative to refs/heads or refs/remotes) to object hash; loose refs override packed ones.</summary>

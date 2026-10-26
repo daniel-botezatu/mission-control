@@ -166,7 +166,8 @@ public sealed class AppController : IAsyncDisposable
     private object LocalOpenLoops(DateTimeOffset now)
     {
         var repositories = Store.GetProjects().Where(project => project.IsApproved).SelectMany(project => project.Repositories ?? []).ToArray();
-        return new { branches = GitBranchLoops.Read(repositories, now, TimeSpan.FromDays(30)), drafts = Store.UnsentDrafts(now.AddDays(-7), 5), checkedAt = now.ToString("O") };
+        var branches = GitBranchLoops.Read(repositories, now, TimeSpan.FromDays(30));
+        return new { branches = branches.Branches, branchesOmitted = branches.Omitted, drafts = Store.UnsentDrafts(now.AddDays(-7), 5), checkedAt = now.ToString("O") };
     }
 
     private object? RecordPage(JsonElement args)

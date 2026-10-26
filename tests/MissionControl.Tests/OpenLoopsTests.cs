@@ -9,8 +9,10 @@ public sealed class OpenLoopsTests : IDisposable
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-26T12:00:00Z");
     private readonly string root = Path.Combine(Path.GetTempPath(), "MissionControl-open-loops-" + Guid.NewGuid().ToString("N"));
 
+    // Refs, config, reflogs and worktrees only: these hashes have no objects, so a difference from the remote
+    // branch cannot be verified and is reported as such rather than guessed.
     [Fact]
-    public void UnpushedAndNeverPushedBranchesAreFoundWithoutStartingGit()
+    public void BranchMetadataIsReadWithoutStartingGit()
     {
         var checkout = Path.Combine(root, "repo");
         var git = Path.Combine(checkout, ".git");
@@ -23,10 +25,8 @@ public sealed class OpenLoopsTests : IDisposable
         Ref("remotes/origin/main", Hash('a'), Now.AddDays(-1));
         Ref("heads/main", Hash('a'), Now.AddDays(-1));
         Ref("heads/never-pushed", Hash('b'), Now.AddHours(-2));
-        Ref("heads/ahead", Hash('c'), Now.AddHours(-1));
-        Ref("remotes/origin/ahead", Hash('d'), Now.AddHours(-3));
-        Ref("heads/behind", Hash('e'), Now.AddHours(-5));
-        Ref("remotes/origin/behind", Hash('f'), Now.AddHours(-4));
+        Ref("heads/differs", Hash('c'), Now.AddHours(-1));
+        Ref("remotes/origin/differs", Hash('d'), Now.AddHours(-3));
         Ref("heads/merged", Hash('1'), Now.AddHours(-6));
         Ref("heads/fresh", Hash('a'), Now.AddHours(-1));
         Ref("heads/old", Hash('2'), Now.AddDays(-45));
@@ -41,9 +41,9 @@ public sealed class OpenLoopsTests : IDisposable
             [branch "main"]
                 remote = origin
                 merge = refs/heads/main
-            [branch "ahead"]
+            [branch "differs"]
                 remote = origin
-                merge = refs/heads/ahead
+                merge = refs/heads/differs
             [branch "merged"]
                 remote = origin
                 merge = refs/heads/merged
@@ -53,11 +53,13 @@ public sealed class OpenLoopsTests : IDisposable
         Write(Path.Combine(git, "worktrees", "wt", "commondir"), "../..\n");
         Write(Path.Combine(worktree, ".git"), "gitdir: " + Path.Combine(git, "worktrees", "wt") + "\n");
 
-        var branches = GitBranchLoops.Read([new(checkout, ["example/repo"]), new(worktree, [])], Now, TimeSpan.FromDays(30));
+        var found = GitBranchLoops.Read([new(checkout, ["example/repo"]), new(worktree, [])], Now, TimeSpan.FromDays(30));
 
-        Assert.Equal([("ahead", "ahead"), ("never-pushed", "never_pushed"), ("team/packed", "never_pushed")], branches.Select(b => (b.Branch, b.State)).ToArray());
-        Assert.All(branches, b => Assert.Equal("example/repo", b.Repository));
-        Assert.Equal(Now.AddHours(-1), DateTimeOffset.Parse(branches[0].LastCommitAt));
+        Assert.Equal([("differs", "unverified", (int?)null), ("never-pushed", "never_pushed", null), ("team/packed", "never_pushed", null)],
+            found.Branches.Select(b => (b.Branch, b.State, b.Commits)).ToArray());
+        Assert.All(found.Branches, b => Assert.Equal("example/repo", b.Repository));
+        Assert.Equal(Now.AddHours(-1), DateTimeOffset.Parse(found.Branches[0].LastCommitAt));
+        Assert.Equal(0, found.Omitted);
     }
 
     [Fact]
@@ -66,7 +68,99 @@ public sealed class OpenLoopsTests : IDisposable
         var local = Path.Combine(root, "local-only");
         Write(Path.Combine(local, ".git", "refs", "heads", "master"), new string('a', 40) + "\n");
         Write(Path.Combine(local, ".git", "logs", "refs", "heads", "master"), $"{new string('0', 40)} {new string('a', 40)} Dev <dev@example.com> {Now.AddHours(-1).ToUnixTimeSeconds()} +0000\tcommit: work\n");
-        Assert.Empty(GitBranchLoops.Read([new(Path.Combine(root, "missing"), []), new(root, []), new(local, [])], Now, TimeSpan.FromDays(30)));
+        Assert.Empty(GitBranchLoops.Read([new(Path.Combine(root, "missing"), []), new(root, []), new(local, [])], Now, TimeSpan.FromDays(30)).Branches);
+    }
+
+    [GitFact]
+    public void CommitHistoryDecidesWhatIsUnpushed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        UnpushedBranch[] Found(string repository) => GitBranchLoops.Read([new(repository, ["synthetic/repository"])], now, TimeSpan.FromDays(30)).Branches.ToArray();
+
+        // Behind only: the local branch was reset below a commit that is already on the remote.
+        var behind = Repository("behind", now);
+        Git(behind, now.AddHours(-3), "commit", "--allow-empty", "-m", "already pushed");
+        Git(behind, now.AddHours(-2), "update-ref", "refs/remotes/origin/main", "HEAD");
+        Git(behind, now.AddHours(-1), "reset", "--hard", "HEAD~1");
+        Assert.Equal("0\t1", Git(behind, now, "rev-list", "--left-right", "--count", "HEAD...@{u}"));
+        Assert.Empty(Found(behind));
+
+        // Diverged: one local commit, and a teammate's commit fetched later.
+        var diverged = Repository("diverged", now);
+        var start = Git(diverged, now, "rev-parse", "HEAD");
+        Git(diverged, now.AddHours(-3), "commit", "--allow-empty", "-m", "local unpushed work");
+        var teammate = Git(diverged, now.AddHours(-2), "commit-tree", Git(diverged, now, "rev-parse", "HEAD^{tree}"), "-p", start, "-m", "teammate work");
+        Git(diverged, now.AddHours(-1), "update-ref", "-m", "fetch origin: fast-forward", "refs/remotes/origin/main", teammate);
+        Assert.Equal("1\t1", Git(diverged, now, "rev-list", "--left-right", "--count", "HEAD...@{u}"));
+        Assert.Equal([("main", "ahead", (int?)1)], Found(diverged).Select(b => (b.Branch, b.State, b.Commits)));
+
+        // Tracking main but pushed to its own pull request branch without -u: nothing is unpushed.
+        var pullRequest = Repository("pull-request", now);
+        Git(pullRequest, now.AddHours(-2), "switch", "-c", "feature/tracks-main", "--track", "origin/main");
+        Git(pullRequest, now.AddHours(-2), "commit", "--allow-empty", "-m", "pull request work");
+        Git(pullRequest, now.AddHours(-1), "update-ref", "refs/remotes/origin/feature/tracks-main", "HEAD");
+        Assert.Equal("1\t0", Git(pullRequest, now, "rev-list", "--left-right", "--count", "HEAD...@{u}"));
+        Assert.Empty(Found(pullRequest));
+
+        // Never pushed: a branch whose commit exists on the remote under another name is pushed; one with its own commit is not.
+        var named = Repository("named", now);
+        Git(named, now.AddHours(-2), "switch", "-c", "feature/pushed-elsewhere");
+        Git(named, now.AddHours(-2), "commit", "--allow-empty", "-m", "pushed as another branch");
+        Git(named, now.AddHours(-2), "update-ref", "refs/remotes/origin/other-name", "HEAD");
+        Git(named, now.AddHours(-1), "switch", "-c", "feature/local-only");
+        Git(named, now.AddHours(-1), "commit", "--allow-empty", "-m", "only here");
+        Assert.Equal([("feature/local-only", "never_pushed", (int?)1)], Found(named).Select(b => (b.Branch, b.State, b.Commits)));
+    }
+
+    [GitFact]
+    public void PackedHistoryStoredAsDeltasIsWalkedLikeGit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = Repository("packed", now);
+        // Similar commit messages make Git store most commits as deltas of one another.
+        var description = string.Concat(Enumerable.Repeat("Shared description that makes these commits similar. ", 40));
+        for (var i = 1; i <= 30; i++) Git(repository, now.AddMinutes(-60 + i), "commit", "--allow-empty", "-m", $"change {i}", "-m", description);
+        Git(repository, now, "repack", "-adfq", "--window=250", "--depth=50");
+        var deltas = Git(repository, now, "verify-pack", "-v", Directory.GetFiles(Path.Combine(repository, ".git", "objects", "pack"), "*.idx").Single())
+            .Split('\n').Count(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [_, "commit", _, _, _, _, _, ..]);
+        Assert.True(deltas >= 10, $"expected commits stored as deltas, found {deltas}");
+        Assert.Equal("30\t0", Git(repository, now, "rev-list", "--left-right", "--count", "HEAD...@{u}"));
+        var found = Assert.Single(GitBranchLoops.Read([new(repository, [])], now, TimeSpan.FromDays(30)).Branches);
+        Assert.Equal(("ahead", (int?)30), (found.State, found.Commits));
+    }
+
+    // A repository whose main branch tracks origin/main at its first commit.
+    private string Repository(string name, DateTimeOffset now)
+    {
+        var path = Path.Combine(root, name);
+        Directory.CreateDirectory(path);
+        Git(path, now.AddHours(-4), "init", "--initial-branch=main");
+        Git(path, now.AddHours(-4), "config", "core.logAllRefUpdates", "true");
+        Git(path, now.AddHours(-4), "commit", "--allow-empty", "-m", "base");
+        Git(path, now.AddHours(-4), "remote", "add", "origin", "https://example.invalid/synthetic/repository.git");
+        Git(path, now.AddHours(-4), "config", "branch.main.remote", "origin");
+        Git(path, now.AddHours(-4), "config", "branch.main.merge", "refs/heads/main");
+        Git(path, now.AddHours(-4), "update-ref", "--create-reflog", "refs/remotes/origin/main", "HEAD");
+        return path;
+    }
+
+    private string Git(string repository, DateTimeOffset at, params string[] arguments)
+    {
+        var info = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = repository, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        var config = Path.Combine(root, "empty-gitconfig");
+        if (!File.Exists(config)) File.WriteAllText(config, "");
+        info.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
+        info.Environment["GIT_CONFIG_GLOBAL"] = config;
+        info.Environment["GIT_AUTHOR_NAME"] = info.Environment["GIT_COMMITTER_NAME"] = "Synthetic";
+        info.Environment["GIT_AUTHOR_EMAIL"] = info.Environment["GIT_COMMITTER_EMAIL"] = "synthetic@example.invalid";
+        info.Environment["GIT_AUTHOR_DATE"] = info.Environment["GIT_COMMITTER_DATE"] = at.ToString("O");
+        using var process = System.Diagnostics.Process.Start(info)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, "git " + string.Join(' ', arguments) + ": " + error);
+        return output.Result.Trim();
     }
 
     [Fact]
@@ -112,6 +206,24 @@ public sealed class OpenLoopsTests : IDisposable
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (Directory.Exists(root)) Directory.Delete(root, true);
+        if (!Directory.Exists(root)) return;
+        // Git writes its objects read-only, which Windows refuses to delete.
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(root, true);
+    }
+}
+
+/// <summary>Runs only where Git is installed; the tests use it to build real repositories, never the code under test.</summary>
+public sealed class GitFactAttribute : FactAttribute
+{
+    public GitFactAttribute()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git", "--version") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
+            process?.WaitForExit(10_000);
+            if (process is not { ExitCode: 0 }) Skip = "Git is not installed.";
+        }
+        catch (System.ComponentModel.Win32Exception) { Skip = "Git is not installed."; }
     }
 }
