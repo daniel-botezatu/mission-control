@@ -2,7 +2,7 @@
 
 **Verdict: not yet ready for a general Mac team rollout.** The source is now suitable for a controlled Mac build/pilot. The previous release had concrete portability/setup defects; the fixes below are prepared as 0.4.11. No Mac was available in this session, so a native Mac build, signing/notarization, Finder/login behavior and real-account integration remain acceptance requirements. The existing installed Windows desktop 0.4.8 / plugin 0.4.10 were not upgraded or reconfigured during this audit.
 
-**Source package:** use `MissionControl-0.4.14-source.zip`. It supersedes the 0.4.11 to 0.4.13 packages. 0.4.14 adds the Open loops panel (branches read from Git metadata files, so the same code runs on macOS), starts each session's GitHub server only on its first GitHub call, keeps tool facts and interrupted updates in saved replies, filters secret-looking values from Slack results in Claude Code, runs Claude recaps in a fresh coordinator, and records why the desktop started and stopped. 0.4.13 stops reporting completely read files that the host later deleted as missing history. Since 0.4.11-r2 the source also adds automatic daily retention by message date, macOS quit handling for Cmd+Q, Dock > Quit and logout, a monochrome menu-bar icon, safer login items (refused from Downloads or a disk image; shown off when disabled in System Settings), protection for the memory server the host packages use during storage cleanup, and documentation without personal installation history. The macOS changes are covered on Windows only by unit tests and code review; they remain part of the Mac pilot checklist.
+**Source package:** use `MissionControl-0.4.15-source.zip`. It supersedes the 0.4.11 to 0.4.14 packages. 0.4.15 fixes six issues a review of 0.4.14 reproduced: unpushed branches are now judged by commit history, every open loop is reachable, review requests link correctly, saved facts come only from commands that performed them, interrupted updates keep their own date, and the memory server agrees with the dashboard on resolved Codex history. 0.4.14 adds the Open loops panel (branches read from Git metadata files, so the same code runs on macOS), starts each session's GitHub server only on its first GitHub call, keeps tool facts and interrupted updates in saved replies, filters secret-looking values from Slack results in Claude Code, runs Claude recaps in a fresh coordinator, and records why the desktop started and stopped. 0.4.13 stops reporting completely read files that the host later deleted as missing history. Since 0.4.11-r2 the source also adds automatic daily retention by message date, macOS quit handling for Cmd+Q, Dock > Quit and logout, a monochrome menu-bar icon, safer login items (refused from Downloads or a disk image; shown off when disabled in System Settings), protection for the memory server the host packages use during storage cleanup, and documentation without personal installation history. The macOS changes are covered on Windows only by unit tests and code review; they remain part of the Mac pilot checklist.
 
 ## Findings and fixes
 
@@ -29,22 +29,22 @@ Adjustable settings and onboarding commands are in [the Mac setup guide](mac-tea
 
 ## Verification performed here
 
-Windows execution, not Mac execution:
+Windows execution, not Mac execution. The first six rows were rerun on the 0.4.15 source on 26 October 2026; the last two are from the 0.4.11 audit and were not repeated.
 
 | Check | Result |
 |---|---|
-| Full .NET suite, refreshed source extraction | 202 passed, 2 skipped: 145 core, 25 backend, 16 MCP, 16 provider tests. Skips are the existing privileged symlink fixture and new Unix permissions test. The added compressed-rollout coverage is included. |
-| Python integration/setup tests | 29 passed, 1 Unix executable-mode test skipped. Covers preservation, collisions, explicit provider preferences, defaults, source archive contents and the native Codex append behavior. |
+| Full .NET suite | 258 passed, 2 skipped: 185 core, 36 backend, 16 MCP, 21 provider tests. Skips are the privileged symlink fixture and the Unix permissions test. Includes the reproductions of the six 0.4.14 review findings and real-Git branch tests (these skip where Git is not installed). |
+| Python integration/setup tests | 32 passed, 1 Unix executable-mode test skipped. Covers preservation, collisions, explicit provider preferences, launcher upgrades, defaults, source archive contents and the native Codex append behavior. |
 | Build configuration tests | 4 passed, including Apple Silicon/Intel plans, complete resources, unsupported-architecture rejection and absence of builder-local plugin packaging. |
-| Rust lifecycle/pipe suite | 6 passed, 1 ignored subprocess fixture. |
-| UI typecheck/build and synthetic browser flows | Passed; 18 browser checks, no runtime errors. |
-| Complete Windows release build | Passed with all three self-contained sidecars and setup resources, `--no-bundle`. No new installer or Mac DMG was produced. |
-| Native recipient setup | Fresh install and immediate repeat both passed in isolated Claude/Codex profiles, each loading cached version 0.4.11. Real host configuration fingerprints unchanged; no model turns or real history used. |
-| Dependency advisories | npm production dependencies: zero reported advisories. NuGet including transitive packages across ten projects: zero reported advisories. This is not proof of absence of vulnerabilities; Rust advisories and a dedicated security assessment were not completed. |
+| Rust lifecycle/pipe suite | 9 passed, 1 ignored subprocess fixture. |
+| UI typecheck/build and synthetic browser flows | Passed; 19 browser checks, no runtime errors. |
+| Complete Windows release build | 0.4.15 installer built with all three self-contained sidecars and setup resources. No Mac DMG was produced. |
+| Native recipient setup (0.4.11 audit) | Fresh install and immediate repeat both passed in isolated Claude/Codex profiles, each loading cached version 0.4.11. Real host configuration fingerprints unchanged; no model turns or real history used. |
+| Dependency advisories (0.4.11 audit) | npm production dependencies: zero reported advisories. NuGet including transitive packages across ten projects: zero reported advisories. This is not proof of absence of vulnerabilities; Rust advisories and a dedicated security assessment were not completed. |
 
 The Windows credential-store test needed a normal logon session and passed there; its initial sandbox failure is not concealed. Claude's initial sandbox path/trust rejection also passed in normal-session isolated profiles. Neither result proves Mac Keychain or Mac trust behavior. Evidence is under local `artifacts/mac-readiness/`, `artifacts/mac-audit-*` and `artifacts/memory-ui-flows/report.json`; private/local artifacts are intentionally excluded from the shareable source archive.
 
-The refreshed package was extracted into an empty directory and restored, compiled and tested there. Python and build-configuration tests were also rerun from that extraction. Its executable source, tests, dependencies and plugin instructions match the final archive by SHA-256; only this report, the checklist and setup-guide clarifications changed after testing. Rust, UI, native-host and release-build results above remain the earlier audit runs, not new runs of the refreshed collector. The installed app, data and host settings were not updated.
+The 0.4.15 results above were run in the working source tree, not in an extraction of the archive; the archive is built from that tree afterwards. The 0.4.11 audit extracted its package into an empty directory and tested it there.
 
 ## Remaining rollout blockers and product limits
 
