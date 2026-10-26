@@ -9,8 +9,8 @@ public sealed class OpenLoopsTests : IDisposable
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-26T12:00:00Z");
     private readonly string root = Path.Combine(Path.GetTempPath(), "MissionControl-open-loops-" + Guid.NewGuid().ToString("N"));
 
-    // Refs, config, reflogs and worktrees only: these hashes have no objects, so a difference from the remote
-    // branch cannot be verified and is reported as such rather than guessed.
+    // Refs, config, reflogs and worktrees only: these hashes have no objects, so whether a listed branch's work was
+    // pushed cannot be verified and is reported as such rather than guessed.
     [Fact]
     public void BranchMetadataIsReadWithoutStartingGit()
     {
@@ -55,7 +55,7 @@ public sealed class OpenLoopsTests : IDisposable
 
         var found = GitBranchLoops.Read([new(checkout, ["example/repo"]), new(worktree, [])], Now, TimeSpan.FromDays(30));
 
-        Assert.Equal([("differs", "unverified", (int?)null), ("never-pushed", "never_pushed", null), ("team/packed", "never_pushed", null)],
+        Assert.Equal([("differs", "unverified", (int?)null), ("never-pushed", "unverified", null), ("team/packed", "unverified", null)],
             found.Branches.Select(b => (b.Branch, b.State, b.Commits)).ToArray());
         Assert.All(found.Branches, b => Assert.Equal("example/repo", b.Repository));
         Assert.Equal(Now.AddHours(-1), DateTimeOffset.Parse(found.Branches[0].LastCommitAt));
@@ -93,6 +93,25 @@ public sealed class OpenLoopsTests : IDisposable
         Git(diverged, now.AddHours(-1), "update-ref", "-m", "fetch origin: fast-forward", "refs/remotes/origin/main", teammate);
         Assert.Equal("1\t1", Git(diverged, now, "rev-list", "--left-right", "--count", "HEAD...@{u}"));
         Assert.Equal([("main", "ahead", (int?)1)], Found(diverged).Select(b => (b.Branch, b.State, b.Commits)));
+
+        // Review finding: a remote descendant dated before its parents (clock skew or imported history) must still
+        // exclude the ancestors walked before it.
+        var skewed = Repository("skewed", now);
+        Git(skewed, now.AddHours(-3), "commit", "--allow-empty", "-m", "also already pushed");
+        var skewedRemote = Git(skewed, now.AddHours(-5), "commit-tree", Git(skewed, now, "rev-parse", "HEAD^{tree}"), "-p", Git(skewed, now, "rev-parse", "HEAD"), "-m", "remote descendant with a backdated clock");
+        Git(skewed, now.AddHours(-1), "update-ref", "refs/remotes/origin/main", skewedRemote);
+        Assert.Equal("0", Git(skewed, now, "rev-list", "--count", "HEAD", "--not", "--remotes"));
+        Assert.Empty(Found(skewed));
+
+        // Review finding: a branch without an upstream whose history cannot be read is unverified, not "never pushed".
+        var unreadable = Repository("unreadable", now);
+        Git(unreadable, now.AddHours(-2), "switch", "-c", "feature/unreadable");
+        Git(unreadable, now.AddHours(-1), "commit", "--allow-empty", "-m", "commit whose object goes missing");
+        var missing = Git(unreadable, now, "rev-parse", "HEAD");
+        var objectFile = Path.Combine(unreadable, ".git", "objects", missing[..2], missing[2..]);
+        File.SetAttributes(objectFile, FileAttributes.Normal);
+        File.Move(objectFile, objectFile + ".hidden");
+        Assert.Equal([("feature/unreadable", "unverified", (int?)null)], Found(unreadable).Select(b => (b.Branch, b.State, b.Commits)));
 
         // Tracking main but pushed to its own pull request branch without -u: nothing is unpushed.
         var pullRequest = Repository("pull-request", now);

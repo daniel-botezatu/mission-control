@@ -48,31 +48,54 @@ internal sealed class GitCommitGraph : IDisposable
     /// </summary>
     internal int? CountOnlyIn(string tip, IReadOnlyCollection<string> bases, int maximumSteps = 20_000)
     {
-        if (bases.Contains(tip)) return 0;
-        // Paint commits from the tip (1) and the bases (2), newest first as Git does; the walk ends once every
-        // queued commit is reachable from both sides.
-        var flags = new Dictionary<string, byte>(StringComparer.Ordinal);
-        var queue = new PriorityQueue<string, long>();
-        bool Enqueue(string hash, byte flag)
+        // Git's own walk for `rev-list tip --not bases` (limit_list): commits newest first; excluding a commit
+        // excludes its already-read ancestors at once, so a descendant reached late because of an older commit
+        // date still excludes ancestors walked before it; and the walk continues a few commits (Git's "slop")
+        // after every queued commit is excluded, longer while dates run out of order.
+        const int Slop = 5;
+        var excluded = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new PriorityQueue<string, (long Time, long Order)>();
+        var included = new List<string>();
+        long order = 0;
+        bool Add(string hash)
         {
-            var current = flags.GetValueOrDefault(hash);
-            if ((current | flag) == current) return true;
+            if (!seen.Add(hash)) return true;
             if (Read(hash) is not { } commit) return false;
-            flags[hash] = (byte)(current | flag);
-            queue.Enqueue(hash, -commit.Time);
+            queue.Enqueue(hash, (-commit.Time, order++));
             return true;
         }
-        if (!Enqueue(tip, 1)) return null;
-        foreach (var hash in bases) if (!Enqueue(hash, 2)) return null;
-        for (var steps = 0; queue.UnorderedItems.Any(item => flags[item.Element] != 3); steps++)
+        void Exclude(string hash)
+        {
+            var pending = new Stack<string>();
+            pending.Push(hash);
+            while (pending.TryPop(out var current))
+                if (excluded.Add(current) && commits.TryGetValue(current, out var known) && known is not null)
+                    foreach (var parent in known.Parents) pending.Push(parent);
+        }
+        if (!Add(tip)) return null;
+        foreach (var hash in bases)
+        {
+            if (!Add(hash)) return null;
+            Exclude(hash);
+        }
+        var slop = Slop;
+        for (var steps = 0; queue.TryDequeue(out var hash, out var priority); steps++)
         {
             if (steps == maximumSteps) return null;
-            var hash = queue.Dequeue();
-            var flag = flags[hash];
+            var leaving = excluded.Contains(hash);
             foreach (var parent in Read(hash)!.Parents)
-                if (!Enqueue(parent, flag) && !shallow.Contains(hash)) return null;
+            {
+                if (!Add(parent)) { if (shallow.Contains(hash)) continue; return null; }
+                if (leaving) Exclude(parent);
+            }
+            if (!leaving) { included.Add(hash); continue; }
+            if (queue.Count == 0) break;
+            queue.TryPeek(out _, out var next);
+            slop = -priority.Time <= -next.Time || queue.UnorderedItems.Any(item => !excluded.Contains(item.Element)) ? Slop : slop - 1;
+            if (slop == 0) break;
         }
-        return flags.Values.Count(flag => flag == 1);
+        return included.Count(hash => !excluded.Contains(hash));
     }
 
     internal Commit? Read(string hash)

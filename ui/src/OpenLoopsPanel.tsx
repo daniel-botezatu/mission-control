@@ -227,7 +227,7 @@ export default function OpenLoopsPanel({
                     {branch.commits != null
                       ? ` · ${branch.commits} ${branch.commits === 1 ? "commit" : "commits"} not pushed`
                       : branch.state === "unverified"
-                        ? " · differs from its remote branch; history could not be read"
+                        ? " · its history could not be read, so whether it was pushed is unknown"
                         : ""}{" "}
                     · last commit {relative(branch.lastCommitAt)}
                   </small>

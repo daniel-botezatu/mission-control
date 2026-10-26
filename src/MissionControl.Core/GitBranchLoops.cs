@@ -5,9 +5,9 @@ namespace MissionControl.Core;
 
 /// <summary>
 /// A local branch with work that is not on its remote. State is "ahead" (it has a remote branch, and commits no
-/// remote branch has),
-/// "never_pushed" (no remote branch, commits no remote branch has) or "unverified" (it differs from its remote
-/// branch, but the commit history could not be read). Commits counts the unpushed commits when known.
+/// remote branch has), "never_pushed" (no remote branch, commits no remote branch has) or "unverified" (its
+/// commit history could not be read, so whether its work was pushed is unknown). Commits counts the unpushed
+/// commits when known.
 /// </summary>
 public sealed record UnpushedBranch(string Repository, string Checkout, string Branch, string State, string LastCommitAt, int? Commits = null);
 
@@ -87,10 +87,11 @@ public static class GitBranchLoops
                 // (someone's pull request) or only created from another branch hold no work of the developer's own.
                 else if (!configured && tracking is null && local.LocalWork && !remoteHashes.Contains(hash))
                 {
-                    // Commits already on the remote under another branch name were pushed.
+                    // Commits already on the remote under another branch name were pushed; history that cannot be read
+                    // proves nothing either way.
                     var ahead = (graph ??= new(common, hash.Length)).CountOnlyIn(hash, remoteHashes);
                     if (ahead == 0) continue;
-                    yield return (new(label, checkout, branch, "never_pushed", moved, ahead), at);
+                    yield return (new(label, checkout, branch, ahead is null ? "unverified" : "never_pushed", moved, ahead), at);
                 }
             }
         }
