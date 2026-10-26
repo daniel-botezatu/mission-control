@@ -39,4 +39,36 @@ public sealed class SupersededFinalsTests
             Directory.Delete(root, true);
         }
     }
+
+    // Review finding: an interrupted update re-dated to its earlier original time must replace the row a previous
+    // parser dated at the interruption; an ordinary older copy still never replaces a newer one.
+    [Fact]
+    public void ReReadingAStreamMayMoveARecordToItsEarlierOriginalTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "MissionControl-reread-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
+            store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
+            store.SetProjectApproval("approved", true);
+            store.SaveSource(new("source", "codex", "Codex", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            EvidenceRecord Update(string timestamp, string stream = "session.jsonl") => new("update", "source", stream, "s", "approved", "codex", "message",
+                "Update", "Update text", "assistant", timestamp, timestamp, WorkingDirectory: root,
+                DataJson: JsonSerializer.Serialize(new { schema = "memory-v1", phase = "final", final = true }));
+            store.CommitBatch([Update("2026-10-26T18:00:00Z")]);
+            store.CommitBatch([Update("2026-10-25T21:01:00Z")]);
+            Assert.Equal("2026-10-26T18:00:00", Time());
+            store.CommitBatch([Update("2026-10-25T21:01:00Z", "other.jsonl")], reinterpretation: true);
+            Assert.Equal("2026-10-26T18:00:00", Time());
+            store.CommitBatch([Update("2026-10-25T21:01:00Z")], reinterpretation: true);
+            Assert.Equal("2026-10-25T21:01:00", Time());
+            string Time() => DateTimeOffset.Parse(Assert.Single(store.Query(new(Kind: "message", Limit: 10)).Records).Timestamp).UtcDateTime.ToString("s");
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(root, true);
+        }
+    }
 }

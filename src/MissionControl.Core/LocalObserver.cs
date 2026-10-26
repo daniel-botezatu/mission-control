@@ -15,8 +15,9 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     // human exchanges. Keep commits bounded while scanning past omitted logs.
     private const int MaximumPassRecords = 8192;
     // Replays old streams once to replace broad tool/intermediate indexing with memory-only rows.
-    // Raising a version re-reads history once: 6/7 add tool facts and interrupted turns' last updates.
-    private static int ParserVersion(string kind) => kind == "codex" ? 7 : 6;
+    // Raising a version re-reads history once: 6/7 add tool facts and interrupted turns' last updates;
+    // 7/8 take facts only from the calls that performed them and date interrupted updates by their own time.
+    private static int ParserVersion(string kind) => kind == "codex" ? 8 : 7;
     private readonly SemaphoreSlim _serial = new(1, 1);
     private readonly SemaphoreSlim _reconcile = new(1, 1);
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
@@ -506,7 +507,8 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             var fingerprint = Prefix(file, Math.Min(128, (int)Math.Min(committed, 128)));
             // A pending final candidate can cross a bounded batch or restart. Never retain its
             // text when the originating cwd is no longer approved, even inside a checkpoint.
-            if (source.Kind != "fixture" && !store.CanIndexWorkingDirectory(metadata.Cwd)) { metadata.PendingAssistant = null; metadata.LastUpdate = null; metadata.PendingFacts = null; }
+            if (source.Kind != "fixture" && !store.CanIndexWorkingDirectory(metadata.Cwd)) { metadata.PendingAssistant = null; ClearTurnNotes(metadata); }
+            NoteHistoryBaseRead(metadata);
             var checkpoint = new StreamCheckpoint(source.Id, streamId, committed, fingerprint, Anchor(file, committed), length, info.LastWriteTimeUtc.Ticks, JsonSerializer.Serialize(metadata));
             token.ThrowIfCancellationRequested();
             store.CommitBatch(records, checkpoint, reinterpreting);
@@ -605,10 +607,10 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         // Retained messages still pass both admission and commit-time consent.
         if (source.Kind == "codex")
         {
-            // Tool output and assistant updates between steps pass on only so that, after the approval
-            // check below, facts and the last update can be kept; their raw text is never stored.
+            // Tool calls, their output and assistant updates between steps pass on only so that, after the
+            // approval check below, facts and the last update can be kept; their raw text is never stored.
             var itemType = type == "response_item" ? Text(payload, "type") : "";
-            if (type == "response_item" && itemType is not ("message" or "function_call_output" or "custom_tool_call_output")) yield break;
+            if (type == "response_item" && itemType is not ("message" or "function_call" or "custom_tool_call" or "local_shell_call" or "function_call_output" or "custom_tool_call_output")) yield break;
             if (type == "response_item" && itemType == "message" && Text(payload, "role") is not ("user" or "assistant")) yield break;
             if (type == "event_msg" && Text(payload, "type") is not ("task_started" or "turn_started" or "task_complete" or "turn_complete" or "turn_aborted" or "error")) yield break;
             if (type is not ("response_item" or "event_msg")) yield break;
@@ -622,7 +624,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         // This cache lasts one bounded read only. CommitBatch rechecks current
         // approval and path safety for every retained record, and checkpoint
         // sanitization rechecks a pending final before persisting its text.
-        if (!approved) { metadata.PendingAssistant = null; metadata.LastUpdate = null; metadata.PendingFacts = null; yield break; }
+        if (!approved) { metadata.PendingAssistant = null; ClearTurnNotes(metadata); yield break; }
         var session = string.IsNullOrEmpty(metadata.Session) ? Path.GetFileNameWithoutExtension(path) : metadata.Session;
         var timestamp = Text(root, "timestamp");
         var fallbackTimestamp = timestamp.Length == 0;
@@ -660,19 +662,44 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             if (pending is null || pending.Cwd != metadata.Cwd || string.IsNullOrWhiteSpace(pending.Text)) return null;
             metadata.FinalEmitted = true;
             var footer = ToolFacts.Footer(metadata.PendingFacts);
-            metadata.PendingFacts = null; metadata.LastUpdate = null;
+            ClearTurnNotes(metadata);
             return Record(pending.Text + footer, "assistant", pending.RecordId, "final", reason, pending.Timestamp, pending.Turn, originalByteOffset: pending.ByteOffset, originalSourceType: "assistant");
         }
-        // A turn the person interrupted has no final reply; keep the assistant's last update, marked as such.
+        // A turn the person interrupted has no final reply; keep the assistant's last update, marked as such. It keeps
+        // the update's own time, source message and offset, so an overnight turn stays on the day it was written; the
+        // interruption itself is the separate lifecycle record at the interruption time.
         EvidenceRecord? Interrupted(string recordId)
         {
-            var last = metadata.PendingAssistant?.Text ?? metadata.LastUpdate;
-            var id = metadata.PendingAssistant?.RecordId ?? recordId;
+            var last = metadata.PendingAssistant is { Text.Length: > 0 } streaming ? streaming : metadata.LastUpdateMessage;
             var footer = ToolFacts.Footer(metadata.PendingFacts);
-            metadata.PendingAssistant = null; metadata.LastUpdate = null; metadata.PendingFacts = null;
-            if (metadata.FinalEmitted || metadata.Turn is null || (string.IsNullOrWhiteSpace(last) && footer.Length == 0)) return null;
+            metadata.PendingAssistant = null; ClearTurnNotes(metadata);
+            if (last is not null && (last.Cwd != metadata.Cwd || string.IsNullOrWhiteSpace(last.Text))) last = null;
+            if (metadata.FinalEmitted || metadata.Turn is null || (last is null && footer.Length == 0)) return null;
             metadata.FinalEmitted = true;
-            return Record("[Interrupted before the turn finished; the assistant's last update]\n" + (last ?? "") + footer, "assistant", id, "final", "interrupted");
+            const string Marker = "[Interrupted before the turn finished; the assistant's last update]\n";
+            return last is null
+                ? Record(Marker + footer.TrimStart('\n'), "assistant", recordId, "final", "interrupted")
+                : Record(Marker + last.Text + footer, "assistant", last.RecordId, "final", "interrupted", last.Timestamp, last.Turn,
+                    originalByteOffset: last.ByteOffset, originalSourceType: last.SourceType ?? "assistant");
+        }
+        PendingAssistant Update(string text) => new()
+        {
+            Text = Bounded(text), RecordId = identity, MessageId = identity, Timestamp = timestamp, Turn = metadata.Turn, Cwd = metadata.Cwd,
+            ByteOffset = byteOffset, SourceType = type
+        };
+        // A shell call is remembered only by the fact-producing operations its command performs.
+        void Called(string callId, string command)
+        {
+            if (callId.Length is 0 or > 256 || ToolFacts.Operations(command) is not { Length: > 0 } operations) return;
+            metadata.PendingCalls ??= new(StringComparer.Ordinal);
+            if (metadata.PendingCalls.Count >= 32) metadata.PendingCalls.Remove(metadata.PendingCalls.Keys.First());
+            metadata.PendingCalls[callId] = operations;
+        }
+        // Output text is built only for a remembered call: most tool output is large and yields no fact.
+        void Observed(string callId, Func<string> output)
+        {
+            if (metadata.PendingCalls?.Remove(callId, out var operations) == true)
+                metadata.PendingFacts = ToolFacts.Merge(metadata.PendingFacts, ToolFacts.From(output(), operations, DateTimeOffset.Parse(timestamp, CultureInfo.InvariantCulture)));
         }
         if (source.Kind == "claude")
         {
@@ -691,7 +718,8 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 // A compaction summary is written by Claude Code, not the person; it is flagged explicitly.
                 if (TranscriptContent.HasBlock(message, "tool_result"))
                 {
-                    metadata.PendingFacts = ToolFacts.Merge(metadata.PendingFacts, ToolFacts.From(ToolResultText(message)));
+                    foreach (var (callId, result) in ToolResults(message))
+                        Observed(callId, () => result.ValueKind == JsonValueKind.String ? result.GetString() ?? "" : PartsText(result));
                     yield break;
                 }
                 if (IsTrue(root, "isMeta") || IsTrue(root, "isCompactSummary")) yield break;
@@ -713,9 +741,15 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 if (TranscriptContent.HasBlock(message, "tool_use") || Text(message, "stop_reason") is "tool_use" or "max_tokens")
                 {
                     // An update between steps is not a final reply, but it is the last thing said if the turn is interrupted.
-                    if (TranscriptContent.MessageText(message) is { Length: > 0 } update) metadata.LastUpdate = Bounded(update);
-                    else if (metadata.PendingAssistant?.Text is { Length: > 0 } earlier) metadata.LastUpdate = Bounded(earlier);
+                    if (TranscriptContent.MessageText(message) is { Length: > 0 } update) metadata.LastUpdateMessage = Update(update);
+                    else if (metadata.PendingAssistant is { Text.Length: > 0 } earlier)
+                    {
+                        earlier.Text = Bounded(earlier.Text);
+                        earlier.SourceType ??= "assistant";
+                        metadata.LastUpdateMessage = earlier;
+                    }
                     metadata.PendingAssistant = null;
+                    foreach (var (callId, command) in ClaudeShellCalls(message)) Called(callId, command);
                     yield break;
                 }
                 var body = TranscriptContent.MessageText(message);
@@ -744,16 +778,21 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         }
         else if (type == "response_item")
         {
+            if (Text(payload, "type") is "function_call" or "custom_tool_call" or "local_shell_call")
+            {
+                if (CodexShellCommand(payload) is { } command) Called(Text(payload, "call_id"), command);
+                yield break;
+            }
             if (Text(payload, "type") is "function_call_output" or "custom_tool_call_output")
             {
-                metadata.PendingFacts = ToolFacts.Merge(metadata.PendingFacts, ToolFacts.From(ToolOutputText(payload)));
+                Observed(Text(payload, "call_id"), () => ToolOutputText(payload));
                 yield break;
             }
             if (Text(payload, "type") != "message") yield break;
             var role = Text(payload, "role");
             if (role == "assistant" && Text(payload, "phase") != "final_answer")
             {
-                if (TranscriptContent.MessageText(payload) is { Length: > 0 } update) metadata.LastUpdate = Bounded(update);
+                if (TranscriptContent.MessageText(payload) is { Length: > 0 } update) metadata.LastUpdateMessage = Update(update);
                 yield break;
             }
             if (role == "user")
@@ -777,7 +816,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 metadata.Turn ??= "orphan:" + identity;
                 metadata.FinalEmitted = true;
                 var footer = ToolFacts.Footer(metadata.PendingFacts);
-                metadata.PendingFacts = null; metadata.LastUpdate = null;
+                ClearTurnNotes(metadata);
                 yield return Record(body + footer, "assistant", identity, "final", "phase");
             }
         }
@@ -800,7 +839,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                     yield return Record(last + footer, "assistant", identity, "final", "task_complete");
                     metadata.FinalEmitted = true;
                 }
-                metadata.PendingFacts = null; metadata.LastUpdate = null;
+                ClearTurnNotes(metadata);
                 metadata.TurnCompleted = true;
                 var hasError = payload.TryGetProperty("error", out var error) && error.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
                 yield return Record(hasError ? "Turn completed with an explicitly recorded error." : "Turn completed (source event; implementation correctness is unverified).",
@@ -809,7 +848,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             else if (eventType is "turn_aborted" or "error")
             {
                 if (eventType == "turn_aborted" && Interrupted(identity) is { } last) yield return last;
-                metadata.PendingAssistant = null; metadata.LastUpdate = null; metadata.PendingFacts = null; metadata.TurnCompleted = true;
+                metadata.PendingAssistant = null; ClearTurnNotes(metadata); metadata.TurnCompleted = true;
                 yield return Record(eventType.Replace('_', ' '), "system", identity, "lifecycle", kind: "lifecycle", state: "last-observed: " + eventType);
             }
             // user_message/agent_message duplicate response_item; tools/reasoning are omitted.
@@ -820,32 +859,67 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     {
         if (metadata.Turn == turn) return;
         metadata.Turn = turn; metadata.FinalEmitted = false; metadata.TurnCompleted = false; metadata.PendingAssistant = null;
-        metadata.PendingFacts = null; metadata.LastUpdate = null;
+        ClearTurnNotes(metadata);
     }
+
+    // Turn-scoped notes: the last update, pending shell calls and the facts from their output.
+    private static void ClearTurnNotes(Metadata metadata) { metadata.LastUpdateMessage = null; metadata.PendingCalls = null; metadata.PendingFacts = null; }
 
     private static string Bounded(string text) => text.Length <= 4000 ? text : text[..4000] + "\n[truncated]";
 
-    // Text of Claude tool_result blocks (a string or text parts), only for fact extraction.
-    private static string ToolResultText(JsonElement message)
+    // Claude tool_use blocks that run a shell command, as (call id, command).
+    private static IEnumerable<(string, string)> ClaudeShellCalls(JsonElement message)
     {
-        if (!message.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array) return "";
-        var parts = new List<string>();
+        if (!message.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array) yield break;
         foreach (var block in content.EnumerateArray().Take(64))
-        {
-            if (block.ValueKind != JsonValueKind.Object || Text(block, "type") != "tool_result" || !block.TryGetProperty("content", out var result)) continue;
-            if (result.ValueKind == JsonValueKind.String) parts.Add(result.GetString() ?? "");
-            else if (result.ValueKind == JsonValueKind.Array)
-                foreach (var part in result.EnumerateArray().Take(64))
-                    if (Text(part, "type") == "text") parts.Add(Text(part, "text"));
-        }
-        return string.Join('\n', parts);
+            if (block.ValueKind == JsonValueKind.Object && Text(block, "type") == "tool_use" && Text(block, "name") is "Bash" or "PowerShell"
+                && block.TryGetProperty("input", out var input) && input.ValueKind == JsonValueKind.Object)
+                yield return (Text(block, "id"), Text(input, "command"));
     }
 
-    // Text of a Codex function_call_output, which may itself be JSON with an "output" field.
+    // The command of a Codex shell call: exec_command/shell arguments, a local shell action, or a code-mode
+    // script whose own text names the commands it runs. Null for other tools.
+    private static string? CodexShellCommand(JsonElement payload)
+    {
+        var name = Text(payload, "name");
+        if (Text(payload, "type") == "custom_tool_call") return name == "exec" ? Text(payload, "input") : null;
+        JsonElement arguments = default;
+        if (Text(payload, "type") == "local_shell_call") { if (!payload.TryGetProperty("action", out arguments)) return null; }
+        else if (name is "shell" or "shell_command" or "exec_command" or "local_shell" && Text(payload, "arguments") is { Length: > 0 } json)
+        {
+            try { using var document = JsonDocument.Parse(json); arguments = document.RootElement.Clone(); }
+            catch (JsonException) { return null; }
+        }
+        else return null;
+        if (arguments.ValueKind != JsonValueKind.Object) return null;
+        if (Text(arguments, "cmd") is { Length: > 0 } cmd) return cmd;
+        if (!arguments.TryGetProperty("command", out var command)) return null;
+        return command.ValueKind switch
+        {
+            JsonValueKind.String => command.GetString(),
+            JsonValueKind.Array => string.Join(' ', command.EnumerateArray().Take(64).Select(part => part.ValueKind == JsonValueKind.String ? part.GetString() : "")),
+            _ => null
+        };
+    }
+
+    // Each Claude tool_result block as (call id, content), only for fact extraction.
+    private static IEnumerable<(string, JsonElement)> ToolResults(JsonElement message)
+    {
+        if (!message.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array) yield break;
+        foreach (var block in content.EnumerateArray().Take(64))
+            if (block.ValueKind == JsonValueKind.Object && Text(block, "type") == "tool_result" && block.TryGetProperty("content", out var result))
+                yield return (Text(block, "tool_use_id"), result);
+    }
+
+    private static string PartsText(JsonElement parts) => parts.ValueKind != JsonValueKind.Array ? ""
+        : string.Join('\n', parts.EnumerateArray().Take(64).Where(part => Text(part, "type") is "text" or "input_text" or "output_text").Select(part => Text(part, "text")));
+
+    // Text of a Codex tool output: a string (possibly JSON with an "output" field), an object, or text parts.
     private static string ToolOutputText(JsonElement payload)
     {
         if (!payload.TryGetProperty("output", out var output)) return "";
         if (output.ValueKind == JsonValueKind.Object) return Text(output, "output") is { Length: > 0 } inner ? inner : Text(output, "content");
+        if (output.ValueKind == JsonValueKind.Array) return PartsText(output);
         if (output.ValueKind != JsonValueKind.String) return "";
         var text = output.GetString() ?? "";
         if (text.StartsWith('{'))
@@ -916,18 +990,23 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     }
 
     /// <summary>
-    /// A Codex conversation that continues an earlier thread is complete once that thread's rollout
-    /// (plain or compressed) has been read at least up to the point it was continued from.
+    /// A Codex conversation that continues an earlier thread is complete once that thread's rollout (plain or
+    /// compressed) was read at least up to the point it was continued from, or lies outside the lookback. Both
+    /// answers are kept in the checkpoint, which is also what the memory server reports.
     /// </summary>
-    private string? EffectiveGap(Metadata metadata)
+    private static string? EffectiveGap(Metadata metadata) =>
+        metadata.Gap == ReferencedHistoryGap && (metadata.HistoryBaseRead || metadata.HistoryBaseOutsideLookback) ? null : metadata.Gap;
+
+    // Records that the earlier thread has now been read far enough; true when this changed the metadata.
+    private bool NoteHistoryBaseRead(Metadata metadata)
     {
-        if (metadata.Gap != ReferencedHistoryGap || metadata.HistoryBaseThread is not { } thread) return metadata.Gap;
-        if (metadata.HistoryBaseOutsideLookback) return null;
+        if (metadata.Gap != ReferencedHistoryGap || metadata.HistoryBaseRead || metadata.HistoryBaseThread is not { } thread) return false;
         var suffix = thread + ".jsonl";
         foreach (var codex in LocalSources().Where(source => source.Kind == "codex"))
             foreach (var checkpoint in store.GetCheckpoints(codex.Id))
-                if (checkpoint.StreamId.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && checkpoint.Offset >= metadata.HistoryBaseOffset) return null;
-        return metadata.Gap;
+                if (checkpoint.StreamId.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && checkpoint.Offset >= metadata.HistoryBaseOffset)
+                    return metadata.HistoryBaseRead = true;
+        return false;
     }
 
     // After a full scan the earlier thread may now be read; clear the warning then. Checkpoints written
@@ -944,7 +1023,8 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             (metadata.HistoryBaseThread, metadata.HistoryBaseOffset) = ReadHistoryBase(existing);
             changed = metadata.HistoryBaseThread is not null;
         }
-        if (metadata.HistoryBaseThread is { } thread && !metadata.HistoryBaseOutsideLookback && EffectiveGap(metadata) is not null && EarlierThreadOutsideLookback(thread))
+        changed |= NoteHistoryBaseRead(metadata);
+        if (metadata.HistoryBaseThread is { } thread && EffectiveGap(metadata) is not null && EarlierThreadOutsideLookback(thread))
         {
             metadata.HistoryBaseOutsideLookback = true;
             changed = true;
@@ -1133,6 +1213,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         public string? Turn { get; set; }
         public string? Cwd { get; set; }
         public long ByteOffset { get; set; }
+        public string? SourceType { get; set; }
     }
     private sealed class Metadata
     {
@@ -1145,6 +1226,9 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         public long HistoryBaseOffset { get; set; }
         // The earlier thread exists but is older than the configured lookback, so it is out of scope, not missing.
         public bool HistoryBaseOutsideLookback { get; set; }
+        // The earlier thread was read at least up to the continuation point. Kept in the checkpoint so the
+        // dashboard and the memory server both treat the referenced history as complete.
+        public bool HistoryBaseRead { get; set; }
         public long ReplayBelow { get; set; }
         public int LookbackDays { get; set; }
         public bool IncludeSubagents { get; set; }
@@ -1160,9 +1244,11 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         public bool FinalEmitted { get; set; }
         public bool TurnCompleted { get; set; }
         public PendingAssistant? PendingAssistant { get; set; }
-        // The assistant's latest update between steps (kept only to record an interrupted turn) and the
-        // tool facts gathered during the current turn, attached to its final reply.
-        public string? LastUpdate { get; set; }
+        // The assistant's latest update between steps, with its own time and identity (kept only to record an
+        // interrupted turn); the current turn's shell calls that perform fact-producing operations (call id to
+        // operations, never the command text); and the facts gathered from their output for the final reply.
+        public PendingAssistant? LastUpdateMessage { get; set; }
+        public Dictionary<string, string>? PendingCalls { get; set; }
         public List<string>? PendingFacts { get; set; }
         public bool Discarding { get; set; }
         public bool WaitingForTail { get; set; }

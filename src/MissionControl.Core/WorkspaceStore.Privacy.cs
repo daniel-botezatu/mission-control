@@ -128,7 +128,7 @@ public sealed partial class WorkspaceStore
             if (data is null) return null;
             var cwd = data.FirstOrDefault(p => p.Key.Equals("cwd", StringComparison.OrdinalIgnoreCase)).Value?.GetValue<string>();
             var project = MatchProjectUnsafe(cwd, transaction);
-            foreach (var property in data.Select(p => p.Key).Where(key => key.Equals("pendingAssistant", StringComparison.OrdinalIgnoreCase)).ToArray())
+            foreach (var property in data.Select(p => p.Key).Where(key => key.Equals("pendingAssistant", StringComparison.OrdinalIgnoreCase) || key.Equals("lastUpdateMessage", StringComparison.OrdinalIgnoreCase)).ToArray())
             {
                 var pending = data[property] as System.Text.Json.Nodes.JsonObject;
                 var pendingCwd = pending?.FirstOrDefault(p => p.Key.Equals("cwd", StringComparison.OrdinalIgnoreCase)).Value?.GetValue<string>();
@@ -136,12 +136,12 @@ public sealed partial class WorkspaceStore
                 if (project is null || !IsProjectApprovedUnsafe(project, transaction)
                     || pendingProject != project || !PrivacyPathWithin(pendingCwd, cwd)) data.Remove(property);
             }
-            // An interrupted turn's last update and pending tool facts are kept only for approved projects.
+            // An interrupted turn's last update, pending shell calls and tool facts are kept only for approved projects.
             if (project is null || !IsProjectApprovedUnsafe(project, transaction))
-                foreach (var property in data.Select(p => p.Key).Where(key => key.Equals("lastUpdate", StringComparison.OrdinalIgnoreCase) || key.Equals("pendingFacts", StringComparison.OrdinalIgnoreCase)).ToArray())
+                foreach (var property in data.Select(p => p.Key).Where(key => key.Equals("lastUpdateMessage", StringComparison.OrdinalIgnoreCase) || key.Equals("pendingCalls", StringComparison.OrdinalIgnoreCase) || key.Equals("pendingFacts", StringComparison.OrdinalIgnoreCase)).ToArray())
                     data.Remove(property);
             // Persist parser state only, never arbitrary payload fields supplied to a checkpoint.
-            var fields = new HashSet<string>(["parserVersion","replayBelow","lookbackDays","includeSubagents","session","cwd","branch","version","timestamp","gap","approvedHistory","subagent","turn","finalEmitted","turnCompleted","pendingAssistant","discarding","waitingForTail","creationTicks","compressedLength","compressedTicks","historyBaseThread","historyBaseOffset","historyBaseOutsideLookback","lastUpdate","pendingFacts"], StringComparer.OrdinalIgnoreCase);
+            var fields = new HashSet<string>(["parserVersion","replayBelow","lookbackDays","includeSubagents","session","cwd","branch","version","timestamp","gap","approvedHistory","subagent","turn","finalEmitted","turnCompleted","pendingAssistant","discarding","waitingForTail","creationTicks","compressedLength","compressedTicks","historyBaseThread","historyBaseOffset","historyBaseOutsideLookback","historyBaseRead","lastUpdateMessage","pendingCalls","pendingFacts"], StringComparer.OrdinalIgnoreCase);
             foreach (var key in data.Select(p => p.Key).Where(key => !fields.Contains(key)).ToArray()) data.Remove(key);
             // Parser state must survive a long pending final. The generic
             // 12 KiB evidence-metadata limit used to replace this entire object

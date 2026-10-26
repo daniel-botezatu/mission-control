@@ -124,7 +124,12 @@ public sealed partial class WorkspaceStore
         lock (gate)
         {
             var (where, parameters, _) = HistoryPredicate(scope, query with { Query = null, IncludeLifecycle = true });
-            const string gap = "CASE WHEN json_valid(cp.metadata_json) THEN COALESCE(json_extract(cp.metadata_json,'$.Gap'),json_extract(cp.metadata_json,'$.gap')) END";
+            // A Codex continuation's referenced history counts as complete once the collector recorded that the earlier
+            // thread was read far enough, or lies outside the lookback; the dashboard applies the same rule.
+            const string gap = "CASE WHEN json_valid(cp.metadata_json) AND NOT (COALESCE(json_extract(cp.metadata_json,'$.Gap'),json_extract(cp.metadata_json,'$.gap')) LIKE 'Referenced Codex history:%'"
+                + " AND (COALESCE(json_extract(cp.metadata_json,'$.HistoryBaseRead'),json_extract(cp.metadata_json,'$.historyBaseRead'),0)=1"
+                + " OR COALESCE(json_extract(cp.metadata_json,'$.HistoryBaseOutsideLookback'),json_extract(cp.metadata_json,'$.historyBaseOutsideLookback'),0)=1))"
+                + " THEN COALESCE(json_extract(cp.metadata_json,'$.Gap'),json_extract(cp.metadata_json,'$.gap')) END";
             using var command = Command("SELECT DISTINCT r.source_id,r.session_id,r.project_id," + gap
                 + " FROM evidence r LEFT JOIN corrections c ON c.record_id=r.id JOIN checkpoints cp ON cp.source_id=r.source_id AND cp.stream_id=r.stream_id"
                 + where + " AND " + gap + " IS NOT NULL ORDER BY r.source_id,r.session_id,r.project_id LIMIT 101", parameters.ToArray());

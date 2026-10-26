@@ -134,6 +134,12 @@ public sealed class CompressedRolloutTests
         File.WriteAllText(f.PathFor("rollout-2026-10-21T10-00-00-01a0cd56-2a9a-7e91-ad1c-de7e64525e10.jsonl"), header + body);
         await f.Run();
         Assert.Equal(warned, (f.Gap() ?? "").Contains("Referenced Codex history", StringComparison.Ordinal));
+        // Review finding: the memory server kept listing a resolved continuation; it must agree with the dashboard.
+        var activity = await new HistoryTools(f.Store).CallAsync("get_project_activity", JsonSerializer.SerializeToElement(new { view = "sessions", sourceId = "source", sessionId = "child" }));
+        using var document = JsonDocument.Parse(activity.Json);
+        var affected = document.RootElement.GetProperty("coverage").GetProperty("affectedSessions").EnumerateArray()
+            .Count(session => session.GetProperty("sessionId").GetString() == "child" && session.GetProperty("kind").GetString() == "referenced_history");
+        Assert.Equal(warned ? 1 : 0, affected);
     }
 
     private static byte[] Decompress(byte[] data)
