@@ -1,0 +1,23 @@
+# Refactor research ? 2026-10-21
+
+The implementation was audited before refactoring. The functioning app was a Tauri/Rust lifecycle shell, React dashboard and C# SQLite core/backend, with a C# stdio MCP server. The refactor retains that storage/recovery boundary and removes its model, agent loop and custom external-service clients. [Decision record](docs/refactor-decisions.md).
+
+## Native hosts and external services
+
+- [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) and [desktop-only plugins](https://developers.openai.com/plugins/deploy/desktop-only): portable root `plugin.json`/`mcp.json`; separate `.codex-plugin` compatibility overlay; OpenAI metadata in `extensions.com.openai`. The formats are not interchangeable with Claude's. Local distribution is used; no public-directory approval is claimed.
+- [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli): stdio executable/args, exact `enabled_tools`, bearer-token environment reference and registered OAuth client settings. Installed CLI **0.160.1** supports `--url`, not Slack's published `--transport` example. Native plugin install and app-server MCP call were exercised using isolated `CODEX_HOME`, without a model turn.
+- [Claude plugin reference](https://code.claude.com/docs/en/plugins-reference), [skills](https://code.claude.com/docs/en/skills), [subagents](https://code.claude.com/docs/en/sub-agents): `.claude-plugin/plugin.json`, root skill/agent/MCP components, forked skill and exact agent tool allowlist. Installed Claude Code **2.1.292** validates both manifests strictly and loads the skill/agent through `--plugin-dir`; native control-protocol status discovers the five tools. A local marketplace may require native path/trust approval; the direct directory route was exercised.
+- [Official GitHub MCP](https://github.com/github/github-mcp-server), [server configuration](https://github.com/github/github-mcp-server/blob/main/docs/server-configuration.md), [remote server](https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md): official hosted endpoint, `X-MCP-Readonly: true` plus an exact read-tool subset. Native PAT environment reference; no embedded/copy-migrated credential.
+- [Official Slack MCP](https://docs.slack.dev/ai/slack-mcp-server/), [harness connections](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/), [Slack plugin source](https://github.com/slackapi/slack-skills-plugin): hosted endpoint and OAuth. The newer harness page documents Codex native MCP; older plugin guidance describes a skills-only Codex package. This adapter explicitly registers native MCP with the operator's registered internal client ID instead of assuming a skill registers it. Slack exposes writes and has no documented blanket read-only option, so exact read tools are restricted in the host. The official Claude Slack plugin can supply its supported OAuth onboarding; its broader skills are not invoked by the memory reader.
+
+External authentication was not performed. Configuration validation is distinct from account authorization and tool execution. Do not reuse another app's public OAuth client ID, print tokens or migrate them silently.
+
+## Collection and storage
+
+[History research](docs/research-history-indexing.md) records all five mandatory reference projects, checked revisions/releases/issues and official transcript evidence. Proven ideas reused: event-driven tailing, durable cursors, tolerant bounded JSONL parsing, structured session/exchange identity, FTS5 ranking and progressive retrieval. No application or parser dependency was copied wholesale.
+
+[SQLite FTS5](https://sqlite.org/fts5.html), [online backup](https://sqlite.org/backup.html), [Microsoft.Data.Sqlite backup](https://learn.microsoft.com/dotnet/standard/data/sqlite/backup), [WAL](https://sqlite.org/wal.html) support the chosen contentless-delete index, safe upgrades and transactional checkpoint design. The embedded SQLite version is measured, not inferred from a package label.
+
+[Official C# MCP SDK](https://github.com/modelcontextprotocol/csharp-sdk) 2.2.0 and [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) supply the standalone stdio transport/catalog. Read-only annotations are hints; database permissions, consent predicates and absent mutation operations enforce the boundary.
+
+No embeddings, model runtime, permanent Python service or unofficial GitHub/Slack server was added. The shared Python installer runs only for package/config maintenance. The skill's seven cross-source scenarios were reviewed with invented evidence; [that report](integrations/tests/forward-test.md) is a paper forward test, not an empirical host-model evaluation.

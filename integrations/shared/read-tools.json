@@ -1,0 +1,5 @@
+{
+  "history": ["search_history", "get_session_digest", "get_exchange", "get_project_activity", "get_session_details"],
+  "github": ["get_me", "search_repositories", "get_file_contents", "list_commits", "get_commit", "list_issues", "search_issues", "issue_read", "list_pull_requests", "search_pull_requests", "pull_request_read"],
+  "slack": ["slack_search_public", "slack_search_public_and_private", "slack_search_channels", "slack_search_users", "slack_read_channel", "slack_read_thread", "slack_read_user_profile"]
+}

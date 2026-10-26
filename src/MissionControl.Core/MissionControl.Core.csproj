@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <!-- Reads Codex rollouts that Codex has compressed to .jsonl.zst. Pure C#, MIT. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+    <EmbeddedResource Include="Migrations/*.sql" />
+    <EmbeddedResource Include="../../fixtures/demo-*.jsonl" Link="Fixtures/%(Filename)%(Extension)" LogicalName="MissionControl.Core.Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

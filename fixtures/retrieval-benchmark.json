@@ -1,0 +1,152 @@
+{
+  "records": [
+    {
+      "id": "clock",
+      "text": "Processor stopped the unreliable session timer. Billing consumes persisted ticking false; no domain thresholds in serialization."
+    },
+    {
+      "id": "migration",
+      "text": "Foreign key ON DELETE RESTRICT must survive the PostgreSQL migration. Validate dedicated disposable database."
+    },
+    {
+      "id": "cache",
+      "text": "We selected a contentless-delete SQLite FTS5 index with bm25 ranking. Search index follows approved project boundaries."
+    },
+    {
+      "id": "oauth",
+      "text": "The login callback port must be 3118. Registered internal app uses PKCE and no embedded secret."
+    },
+    {
+      "id": "retry",
+      "text": "Fix invoice webhook retry idempotency with the delivery identifier. Do not double bill."
+    },
+    {
+      "id": "release",
+      "text": "Release checklist: PR 437 is still open; assistant says done but current head bbbb2222 has no passing check."
+    },
+    {
+      "id": "promise",
+      "text": "I promised Jordan to compare session timer traces tomorrow before reviewing PR 437."
+    },
+    {
+      "id": "worktree",
+      "text": "SP contains billing and processor Git repositories. Group both under the observed SP project root; preserve worktree attribution."
+    },
+    {
+      "id": "cursor",
+      "text": "Codex JSONL byte cursor and pending Claude final reply must survive restart without duplicate evidence."
+    },
+    {
+      "id": "interrupt",
+      "text": "The session was interrupted after the user requested cancellation. No reliable final response was observed."
+    },
+    {
+      "id": "deploy",
+      "text": "Staging deployment failed in the asset upload step. Merged PR alone does not prove deployment."
+    },
+    {
+      "id": "design",
+      "text": "Decision: keep the existing C# SQLite collector shared by desktop and MCP. Tauri remains the lightweight Rust lifecycle shell."
+    },
+    {
+      "id": "noise-a",
+      "text": "Update project labels and accent colors in settings."
+    },
+    {
+      "id": "noise-b",
+      "text": "Tomorrow discuss lunch with colleagues. No commitment was made."
+    },
+    {
+      "id": "noise-c",
+      "text": "Fix a CSS margin in the timeline row."
+    }
+  ],
+  "questions": [
+    {
+      "questionText": "Where did we decide clock quality belongs?",
+      "query": "session timer",
+      "relevant": [
+        "clock",
+        "promise"
+      ]
+    },
+    {
+      "questionText": "What FK action did the migration preserve?",
+      "query": "RESTRICT",
+      "relevant": [
+        "migration"
+      ]
+    },
+    {
+      "questionText": "Why did we choose this search index?",
+      "query": "contentless bm25",
+      "relevant": [
+        "cache"
+      ]
+    },
+    {
+      "questionText": "How did we configure OAuth?",
+      "query": "oauth",
+      "relevant": [
+        "oauth"
+      ]
+    },
+    {
+      "questionText": "How do invoice retries avoid double billing?",
+      "query": "invoice idempotency",
+      "relevant": [
+        "retry"
+      ]
+    },
+    {
+      "questionText": "Was PR 437 actually complete?",
+      "query": "437",
+      "relevant": [
+        "release",
+        "promise"
+      ]
+    },
+    {
+      "questionText": "What did I promise Jordan?",
+      "query": "Jordan",
+      "relevant": [
+        "promise"
+      ]
+    },
+    {
+      "questionText": "Why are two repos one SP project?",
+      "query": "SP repositories",
+      "relevant": [
+        "worktree"
+      ]
+    },
+    {
+      "questionText": "What did restart recovery preserve?",
+      "query": "cursor restart",
+      "relevant": [
+        "cursor"
+      ]
+    },
+    {
+      "questionText": "Where did I stop the interrupted session?",
+      "query": "interrupted cancellation",
+      "relevant": [
+        "interrupt"
+      ]
+    },
+    {
+      "questionText": "Did staging deploy?",
+      "query": "Staging deployment",
+      "relevant": [
+        "deploy"
+      ]
+    },
+    {
+      "questionText": "Why retain the collector?",
+      "query": "C# SQLite collector",
+      "relevant": [
+        "design"
+      ]
+    }
+  ]
+}

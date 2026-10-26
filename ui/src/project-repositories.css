@@ -1,0 +1,114 @@
+.project-origin {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.project-name-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-repository-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+.project-repositories {
+  list-style: none;
+  padding: 0;
+  margin: 11px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.project-repositories li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.project-repositories li > svg {
+  margin-top: 2px;
+}
+.project-repositories li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.project-repositories strong {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  color: var(--subtle);
+}
+.project-repositories code {
+  font-size: 9px;
+  color: var(--muted);
+}
+.project-root-row > div {
+  min-width: 0;
+}
+.project-root-row .project-repositories {
+  margin-top: 9px;
+}
+.project-settings-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.project-context .project-origin {
+  margin: 0 19px 14px;
+}
+.project-context .project-repositories {
+  margin: 10px 19px 17px;
+}
+.project-context .project-repositories code {
+  margin: 0;
+  display: block;
+}
+.project-context .project-repositories strong {
+  display: block;
+}
+.project-card .project-name-line {
+  margin-bottom: 1px;
+}
+.project-card .project-repository-count {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+.remote-auto-project {
+  color: var(--green);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.project-evidence-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.85;
+  color: var(--muted);
+  padding: 4px 20px 18px;
+}
+.project-evidence-note svg {
+  color: var(--green);
+}

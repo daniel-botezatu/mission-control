@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Version>0.4.13</Version>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>mission-control-mcp</AssemblyName>
+    <RootNamespace>MissionControl.Mcp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../MissionControl.Core/MissionControl.Core.csproj" />
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
+    <InternalsVisibleTo Include="MissionControl.Mcp.Tests" />
+  </ItemGroup>
+</Project>

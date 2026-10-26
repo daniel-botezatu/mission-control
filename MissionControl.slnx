@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MissionControl.Backend/MissionControl.Backend.csproj" />
+    <Project Path="src/MissionControl.Cli/MissionControl.Cli.csproj" />
+    <Project Path="src/MissionControl.Core/MissionControl.Core.csproj" />
+    <Project Path="src/MissionControl.Mcp/MissionControl.Mcp.csproj" />
+    <Project Path="src/MissionControl.Providers/MissionControl.Providers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="src/MissionControl.Backend/Tests/MissionControl.Backend.Tests.csproj" />
+    <Project Path="tests/MissionControl.CrashProbe/MissionControl.CrashProbe.csproj" />
+    <Project Path="tests/MissionControl.Tests/MissionControl.Tests.csproj" />
+    <Project Path="tests/MissionControl.Mcp.Tests/MissionControl.Mcp.Tests.csproj" />
+    <Project Path="tests/MissionControl.Providers.Tests/MissionControl.Providers.Tests.csproj" />
+  </Folder>
+</Solution>

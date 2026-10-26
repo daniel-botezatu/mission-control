@@ -1,0 +1,88 @@
+# Mission Control
+
+**Mac team preparation (source 0.4.11):** portability/setup fixes are implemented and Windows regressions pass. A real Mac build, signing/notarization and pilot remain required before team rollout. See [the readiness audit](docs/team-readiness-audit.md) and [Mac setup guide](docs/mac-team-setup.md). No personal settings, history or generated host packages should be distributed.
+
+Version 0.4.13 no longer reports a source file as missing history when the host deleted it after Mission Control had read it completely (for example Claude Code's 30-day clean-up); only unread parts count. Version 0.4.12 reads Codex rollouts that Codex has compressed (`.jsonl.zst`) as the same conversations as their plain files, and keeps slash commands, command output, compaction summaries and Codex app events out of the user's words (Codex review results are kept as AI-written results). It applies the saved retention period automatically once a day by message date, lets macOS Cmd+Q, Dock > Quit and logout quit normally, uses a monochrome macOS menu-bar icon, and refuses a login item for an app still running from Downloads or its disk image.
+
+**Recap quality:** an internal comparison on one real working day found that reading every message does not by itself preserve every useful recap item; see [Known limitations](KNOWN_LIMITATIONS.md). The evaluation report stays with local evaluation artifacts and is not part of the source package.
+
+Version 0.4.8 sends one copy of each memory response, fills bounded pages efficiently, and repeats coverage only when its meaning changes. Configure the recap timezone (for example `Europe/Amsterdam`) once; calendar-date filters and displayed message times use it, including DST. Memory plugin 0.4.9 removes outline reads from recaps: Claude uses bounded, complete-message readers and merges cited ledgers; Codex retains the full-stream fallback. The optional Windows GitHub launcher reuses the existing GitHub CLI login with a pinned, read-only official server. Slack remains a direct host connection; its output is not filtered by Mission Control.
+
+
+Mission Control desktop 0.4.8 and memory plugin/server 0.4.10 provide a local developer-memory dashboard and read-only MCP server. They index approved Claude Code and Codex conversations. Claude Code/Codex provide reasoning; the official GitHub and Slack MCP servers provide live work evidence.
+
+The memory plugin provides a complete, paged message stream for a requested date window, across all approved sessions. It reads original message dates, including middle topics of chats spanning multiple days, and continues long bodies without omitting their middle. Bounded full MCP responses, signed cursors, content fingerprints and recent-first session reads support a topic-aware recap in the calling host. The plugin supplies evidence rather than inferred topic/completion labels. Existing source gaps remain explicit. The versioned memory server can be updated without stopping desktop collection; no schema change or history reset is needed.
+
+Source notices identify the affected source and can be dismissed. The same notice stays dismissed across dashboard restarts; changed source diagnostics appear again. Details remain available in Settings.
+
+Version 0.4.8 fixes the namespaced Claude read-only helper, scopes repeated path validation to each SQL statement, clears resolved replay warnings, and attributes remaining gaps to matching approved sessions. Compact recap pages carry all messages and topics with fewer repeated identifiers and coverage blocks. Private Slack/DM search consent is an explicit saved host-package preference. Update helpers retain the latest two verified encrypted backups and defer removal of older memory servers still in use.
+
+## Indexing reliability
+
+Version 0.4.3 fixes parser-state loss after long replies, repeated filesystem checks against unrelated repositories, bounded-queue rescan storms, and stale dashboard updates during continuous collection. Overview uses original activity timestamps. Live counters show unread files and bytes; every MCP response reports approved-project/source coverage, including empty results. Long retained messages are available through bounded pages in the dashboard and MCP. Automatic search adds technical synonyms and bounded spelling correction; use `mode: all` or `phrase` for strict matching.
+
+The update preserves settings, source selections, repository groups and approvals. Original transcripts are replayed in place after the parser upgrade; no index clear is required.
+
+## Run the desktop
+
+Use `artifacts/release/0.4.8/Mission Control_0.4.8_x64-setup.exe`, or extract the portable ZIP and run `mission-control.exe`. Keep the backend and MCP executables beside it. Microsoft Edge WebView2 is required; .NET and Node are bundled/not required at runtime.
+
+1. Open Mission Control from the Start menu or tray. Switch **Demo ? Live**.
+2. In **Settings ? Monitoring**, enable the local Claude/Codex session folders you want observed.
+3. In **Settings ? Approved projects**, approve specific project roots. Discovery alone never grants permission. An observed parent folder such as `SP` groups its nested Git repositories into one project; repository/worktree metadata supplies attribution.
+4. Resume collection. Search, Sessions and Timeline work without an AI host running. Close the dashboard to keep the lightweight collector in the tray; **Quit completely** stops it.
+
+Only user messages and reliably identified final assistant responses enter history. Reasoning, tool output and delegated subagent prompts are excluded. Unknown projects are excluded. Approval revocation immediately purges the project's indexed payload and annotations. **Clear all history** pauses collection; resuming can recover still-available approved source files.
+
+**Sessions** groups whole conversations into cards. **Search** finds messages, decisions and private notes after entering keywords. **Timeline** shows individual messages across conversations, grouped by day and ordered by their original timestamps. Refresh queues reconciliation in the background; source progress appears under **Overview → Collection freshness**.
+
+**Overview** and **Settings → Privacy & storage** show live saved-entry and conversation totals, entry-type counts, disk usage, active database space and the storage budget. Lightweight local statistics refresh every two seconds while that view is visible and the native window is not minimised; they do not reload conversations, restart collection or contact GitHub. Counts cover all approved indexed history rather than only the dashboard's 250 recent rows. Disk usage includes the active database and current write files; active data excludes reusable free pages, so disk allocation can stay flat or fluctuate during indexing. Backups and original session files are separate. The sidebar and footer show the version reported by the running desktop executable.
+
+**Overview → Your open pull requests** shows up to six recent PRs authored by the active GitHub CLI account, with a total count, draft/review state and links to all results. Install [GitHub CLI](https://cli.github.com/) and run `gh auth login` once if needed. Mission Control uses the CLI's existing credentials, performs one fixed read-only query on opening Overview, caches its result in memory for five minutes, and offers an explicit Refresh. It does not poll GitHub in the tray, import PRs into history or store tokens. Demo mode makes no GitHub request. A failed request is shown as unavailable, rather than as zero open PRs.
+
+## Connect Claude Code or Codex
+
+See [the integration guide](integrations/README.md) for exact installation, optional GitHub/Slack setup, updates and removal. Installing a skill alone is insufficient: register the MCP server explicitly using **Settings ? MCP integration**, or apply the generated native configuration.
+
+The server exposes `search_history`, `get_session_digest`, `get_exchange`, `get_project_activity` and `get_session_details`. It starts on demand over stdio, opens the existing database read-only and exits when its host disconnects. No dashboard is needed to query an already-created index; collection requires the desktop collector or portable CLI.
+
+Example questions: ?Where did I leave off on SP??, ?What did I promise Jordan last week??, ?Find the decision about session timers.? The packaged `developer-memory` skill retrieves bounded evidence and distinguishes claims, observations and current external state.
+
+## Upgrade and privacy
+
+The default data location remains `%LOCALAPPDATA%\MissionControl`. Existing theme, collection preferences, project/repository grouping and relevant conversation history are retained. The initial upgrade from 0.3 to 0.4 requires explicit project approval; 0.4.1 preserves approvals already granted. Before a schema upgrade, the app creates and integrity-checks a SQLite backup under each database's `migration-backups` directory. Original history files are never edited.
+
+The old custom model/GitHub/Slack configurations, cached results and external data are retired. Scoped old credential references are queued for deletion through an upgrade-only native vault adapter; failures remain visible with a retry control. Tokens are never copied into the new integration. Official servers authenticate in the AI host. This is an intentional change from the earlier custom-token setup.
+
+**Backups can contain excluded history and retired configuration.** They are outside MCP access, are not removed by history purge, and should be archived privately or explicitly deleted after checking the upgrade. The pre-refactor source and local `.env` were preserved in ignored `artifacts/refactor-backup`; neither ships in the release. The optional [upgrade helper](scripts/update-installed.ps1) requires the old app to be fully quit, makes a DPAPI-protected workspace backup and runs the selected installer. The installed Windows copy was subsequently upgraded from 0.3.3 to 0.4.0 after a confirmed full quit. The encrypted backup, schema migration, unchanged local preferences, preserved Live/paused state and removal of AI setup were verified; see `artifacts/installed-upgrade-verification/`.
+
+## Build and verify
+
+Development tools: .NET SDK pinned in `global.json`, Node/npm, Rust/Cargo, Windows build tools and WebView2. On Windows use `codex.cmd` if PowerShell blocks the npm shim.
+
+```powershell
+dotnet restore MissionControl.slnx --packages .local/nuget
+dotnet test MissionControl.slnx --no-restore
+npm ci --prefix ui
+npm run build --prefix ui
+node scripts/build-tauri.mjs
+cargo test --manifest-path src-tauri/Cargo.toml --locked
+python -X utf8 -m unittest discover -s integrations/tests -p test_manage.py
+powershell -ExecutionPolicy Bypass -File scripts/crash-recovery.ps1
+powershell -ExecutionPolicy Bypass -File scripts/replay-restart.ps1
+```
+
+The native credential test creates only randomly named disposable test credentials and needs a normal Windows logon session. The symlink fixture is opt-in where Windows privileges allow it. See [verification](FINAL_INTEGRATION_CHECKLIST.md), [benchmarks](BENCHMARKS.md), [architecture](ARCHITECTURE.md), [research](RESEARCH.md) and [limitations](KNOWN_LIMITATIONS.md).
+
+## WSL / portability
+
+Do not point Windows monitoring at `\\wsl$` / `\\wsl.localhost`. Publish the portable collector and MCP inside Linux, explicitly approve Linux project paths, then collect there:
+
+```bash
+dotnet publish src/MissionControl.Cli -c Release -r linux-x64 --self-contained true -o artifacts/linux/collector
+dotnet publish src/MissionControl.Mcp -c Release -r linux-x64 --self-contained true -o artifacts/linux/mcp
+artifacts/linux/collector/MissionControl.Cli approve --root /home/me/work/SP --data-dir /home/me/.local/share/MissionControl
+artifacts/linux/collector/MissionControl.Cli collect --watch --data-dir /home/me/.local/share/MissionControl
+```
+
+Configure a Linux AI host to launch that Linux MCP binary with the same data directory. Windows and Linux approvals/indexes remain separate; no transparent cross-environment path translation is claimed. This workflow and macOS packaging have not been executed here.

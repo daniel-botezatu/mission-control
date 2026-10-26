@@ -1,0 +1,6 @@
+{
+  "identifier": "dashboard",
+  "description": "Only the bundled dashboard can receive workspace change notifications.",
+  "windows": ["dashboard"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}
