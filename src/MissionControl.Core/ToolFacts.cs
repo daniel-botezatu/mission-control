@@ -5,10 +5,10 @@ namespace MissionControl.Core;
 
 /// <summary>
 /// Short, verifiable facts a final reply may not repeat: a pull request a command created, commits and pushes it
-/// made, and test-run summaries. A fact is taken from a shell call's output only when that call performed the
-/// operation (<c>gh pr create</c>, <c>git commit</c>, <c>git push</c>, a test runner), so a log or file it merely
-/// printed yields nothing. Each fact names the operation and when its output was observed. Raw tool output itself
-/// is never stored; only these one-line facts are, attached to the turn's final reply.
+/// made, and test-run summaries. A fact is taken from a shell call's output only when that call executed the
+/// operation (<c>gh pr create</c>, <c>git commit</c>, <c>git push</c>, a test runner) and printed no other file or
+/// search text, so a log it read or searched yields nothing. Each fact names the operation and when its output was
+/// observed. Raw tool output itself is never stored; only these one-line facts are, attached to the turn's final reply.
 /// </summary>
 public static class ToolFacts
 {
@@ -17,17 +17,8 @@ public static class ToolFacts
     private static readonly TimeSpan Limit = TimeSpan.FromMilliseconds(100);
     private const RegexOptions Options = RegexOptions.CultureInvariant | RegexOptions.NonBacktracking;
 
-    // What a shell command does, judged from its text: a program or subcommand counts only as a whole command word,
-    // so `cat pytest.log` runs no tests and `git commit-tree` makes no commit. Global options such as -C <path>,
-    // -c name="A B" or --no-pager may precede a git subcommand; a word may contain quoted parts.
-    private const string Before = @"(?:^|[\s;&|(""'/\\])", After = @"(?:$|[\s;&|)""'])";
-    private const string Word = @"(?:[^\s""']|""[^""]*""|'[^']*')+";
-    private const string GitPrefix = Before + @"git(?:\s+(?:-[Cc]\s+" + Word + @"|--no-pager|-P|--(?:git-dir|work-tree)=" + Word + @"))*\s+";
-    private static readonly Regex CreatesPullRequest = new(Before + @"gh\s+pr\s+create" + After, Options, Limit);
-    private static readonly Regex Commits = new(GitPrefix + "commit" + After, Options, Limit);
-    private static readonly Regex Pushes = new(GitPrefix + "push" + After, Options, Limit);
+    // Every recognised command contains one of these; most tool calls contain none and are not parsed.
     private static readonly string[] Keywords = ["git", "gh", "test", "jest", "pest", "phpunit"];
-    private static readonly Regex RunsTests =new(Before + @"(?:dotnet\s+test|pytest|py\.test|unittest|cargo\s+(?:test|nextest)|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test|jest|vitest|phpunit|pest|artisan\s+test|composer\s+(?:run\s+)?test)" + After, Options | RegexOptions.IgnoreCase, Limit);
 
     private static readonly Regex PullRequest = new(@"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)", Options, Limit);
     private static readonly Regex Commit = new(@"(?m)^\[([^\]\s]+)(?: \(root-commit\))? ([0-9a-f]{7,40})\] ([^\r\n]{1,120})", Options, Limit);
@@ -40,24 +31,21 @@ public static class ToolFacts
     private static readonly Regex PhpUnitOk = new(@"OK \((\d+) tests?, (\d+) assertions?\)", Options, Limit);
     private static readonly Regex PhpUnitFail = new(@"Tests: (\d+), Assertions: (\d+), (?:Errors: \d+, )?Failures: (\d+)", Options, Limit);
 
-    /// <summary>The fact-producing operations a shell command performs ("pr commit push test"); empty when none.</summary>
+    /// <summary>
+    /// The fact-producing operations a shell command executes ("pr commit push test"): commands a shell would run,
+    /// never quoted text or heredoc bodies, and never a dry run. Empty when there are none, or when the call also
+    /// prints files or search results whose text could not be told apart from the operations' own output.
+    /// </summary>
     public static string Operations(string? command)
     {
         if (string.IsNullOrWhiteSpace(command)) return "";
         var text = command.Length <= 16 * 1024 ? command : command[..(16 * 1024)];
-        // Every recognised command contains one of these; most tool calls contain none and skip the patterns.
         if (!Keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase))) return "";
-        try
-        {
-            var operations = new List<string>(4);
-            if (CreatesPullRequest.IsMatch(text)) operations.Add("pr");
-            if (Commits.IsMatch(text)) operations.Add("commit");
-            if (Pushes.IsMatch(text)) operations.Add("push");
-            if (RunsTests.IsMatch(text)) operations.Add("test");
-            return string.Join(' ', operations);
-        }
-        catch (RegexMatchTimeoutException) { return ""; }
+        return ShellCommands.Operations(text);
     }
+
+    /// <summary>The shell commands a Codex code-mode script runs, one per line, for <see cref="Operations"/>.</summary>
+    public static string CodeModeCommands(string script) => ShellCommands.CodeModeCommands(script);
 
     /// <summary>Facts in one call's output for the operations that call performed, labelled with when they were observed.</summary>
     public static IReadOnlyList<string> From(string? output, string? operations, DateTimeOffset observedAt)

@@ -48,7 +48,31 @@ public sealed class ToolFactsTests
     [InlineData("gh pr create --fill --base main", "pr")]
     [InlineData("python -m pytest -q", "test")]
     [InlineData("./vendor/bin/pest --parallel", "test")]
-    [InlineData("tools.exec_command({cmd:\"cargo test --locked\"})", "test")]
+    [InlineData("npm run test:unit -- --run", "test")]
+    [InlineData("cd /c/work/app && npm test 2>&1 | sed 's/x//g' | grep -v '^at ' | tail -25", "test")]
+    [InlineData("dotnet test 2>&1 | Select-String Passed", "test")]
+    [InlineData("$out = dotnet test 2>&1; $out | Select-Object -Last 5", "test")]
+    [InlineData("sed -i 's/a/b/' tests/app.test.js && npm test", "test")]
+    [InlineData("cat > package.json <<'EOF'\n{ \"scripts\": { \"test\": \"git commit -m x\" } }\nEOF\nnpm test 2>&1 | tail -5", "test")]
+    [InlineData("wsl.exe -e bash -lc \"cd ~/app && npm test\"", "test")]
+    [InlineData("powershell -Command \"cd C:/app; dotnet test\"", "test")]
+    [InlineData("bash -lc 'git commit -m x && git push'", "commit push")]
+    [InlineData("npm run -s test:coverage > \"$TEMP/cov.log\" 2>&1; echo rc=$?; grep -E 'Tests |FAIL' \"$TEMP/cov.log\"", "test")]
+    [InlineData("dotnet test 2>&1 | tee run.log; tail -5 run.log", "test")]
+    [InlineData("PHP=/c/tools/php85/php.exe; \"$PHP\" vendor/bin/pest --parallel", "test")]
+    [InlineData("$php = \"C:\\tools\\php.exe\"; & $php vendor/bin/phpunit", "test")]
+    [InlineData("/c/tools/php85/php.exe -d memory_limit=2G vendor/bin/pest tests/Feature", "test")]
+    [InlineData("grep -E 'Tests ' cov.log; npm test > cov.log", "")]
+    // Review findings: searching a log for a command, and dry runs, perform nothing.
+    [InlineData("rg 'dotnet test|Passed!' old-build.log", "")]
+    [InlineData("git push --dry-run origin topic", "")]
+    [InlineData("git push -n origin topic", "")]
+    [InlineData("git push -nu origin topic", "")]
+    [InlineData("git commit --dry-run", "")]
+    [InlineData("gh pr create --dry-run --fill", "")]
+    [InlineData("echo 'npm test' && grep -c Passed run.log", "")]
+    [InlineData("Get-Content old.log; dotnet test", "")]
+    [InlineData("python - <<'PYEOF'\nimport subprocess\nsubprocess.run(['pytest'])\nPYEOF", "")]
     [InlineData("Get-Content build.log", "")]
     [InlineData("cat pytest.log", "")]
     [InlineData("git commit-tree HEAD^{tree} -m x", "")]
@@ -56,6 +80,18 @@ public sealed class ToolFactsTests
     [InlineData("gh pr view 36", "")]
     public void CommandsAreClassifiedByTheOperationsTheyPerform(string command, string operations) =>
         Assert.Equal(operations, ToolFacts.Operations(command));
+
+    [Fact]
+    public void CodeModeScriptsAreReadThroughTheCommandsTheyRun()
+    {
+        Assert.Equal("cargo test --locked", ToolFacts.CodeModeCommands("text(await tools.exec_command({cmd:\"cargo test --locked\"}))"));
+        Assert.Equal("Get-Content -LiteralPath 'C:\\notes\\a.md'", ToolFacts.CodeModeCommands("tools.exec_command({cmd:\"Get-Content -LiteralPath 'C:\\\\notes\\\\a.md'\",max_output_tokens:1000})"));
+        Assert.Equal("test", ToolFacts.Operations(ToolFacts.CodeModeCommands("text(await tools.exec_command({cmd:\"dotnet test\"}))")));
+        // Reading a file alongside the test run makes the combined output unattributable.
+        Assert.Equal("", ToolFacts.Operations(ToolFacts.CodeModeCommands(
+            "await Promise.allSettled([tools.exec_command({cmd:\"Get-Content README.md\"}), tools.exec_command({cmd:\"dotnet test\"})])")));
+        Assert.Equal("", ToolFacts.Operations(ToolFacts.CodeModeCommands("console.log('npm test')")));
+    }
 
     [Fact]
     public async Task ClaudeFinalReplyCarriesTheResultsOfCommandsItRan()
@@ -90,6 +126,22 @@ public sealed class ToolFactsTests
             f.Claude("assistant", "a3", "I read the old log. Nothing was run or created today.", stopReason: "end_turn"));
         var final = Assert.Single(await f.Messages(), r => r.Author == "assistant");
         Assert.Equal("I read the old log. Nothing was run or created today.", final.Body);
+    }
+
+    // Review findings: searching an old log for a test command, and a dry-run push, recorded work that never happened.
+    [Theory]
+    [InlineData("rg 'dotnet test|Passed!' old-build.log", "Passed!  - Failed: 0, Passed: 99, Skipped: 0, Total: 99, Duration: 1 s - OldSuite.dll (net10.0)")]
+    [InlineData("git push --dry-run origin topic", "To https://github.com/synthetic/repository.git\n * [new branch]      topic -> topic")]
+    public async Task SearchesAndDryRunsAttachNothingToTheReply(string command, string output)
+    {
+        using var f = new Fixture("claude");
+        await f.Write(
+            f.Claude("user", "u1", "Check without changing anything."),
+            f.ClaudeTool("a1", "", "Bash", command),
+            f.ClaudeResult("r1", "tool-a1", output),
+            f.Claude("assistant", "a2", "Nothing was run or pushed.", stopReason: "end_turn"));
+        var final = Assert.Single(await f.Messages(), r => r.Author == "assistant");
+        Assert.Equal("Nothing was run or pushed.", final.Body);
     }
 
     [Fact]

@@ -16,8 +16,9 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     private const int MaximumPassRecords = 8192;
     // Replays old streams once to replace broad tool/intermediate indexing with memory-only rows.
     // Raising a version re-reads history once: 6/7 add tool facts and interrupted turns' last updates;
-    // 7/8 take facts only from the calls that performed them and date interrupted updates by their own time.
-    private static int ParserVersion(string kind) => kind == "codex" ? 8 : 7;
+    // 7/8 take facts only from the calls that performed them and date interrupted updates by their own time;
+    // 8/9 read the commands a call executes as a shell would, ignoring searches, quoted text and dry runs.
+    private static int ParserVersion(string kind) => kind == "codex" ? 9 : 8;
     private readonly SemaphoreSlim _serial = new(1, 1);
     private readonly SemaphoreSlim _reconcile = new(1, 1);
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
@@ -877,12 +878,12 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 yield return (Text(block, "id"), Text(input, "command"));
     }
 
-    // The command of a Codex shell call: exec_command/shell arguments, a local shell action, or a code-mode
-    // script whose own text names the commands it runs. Null for other tools.
+    // The command of a Codex shell call: exec_command/shell arguments, a local shell action, or the exec_command
+    // commands of a code-mode script, one per line. Null for other tools.
     private static string? CodexShellCommand(JsonElement payload)
     {
         var name = Text(payload, "name");
-        if (Text(payload, "type") == "custom_tool_call") return name == "exec" ? Text(payload, "input") : null;
+        if (Text(payload, "type") == "custom_tool_call") return name == "exec" ? ToolFacts.CodeModeCommands(Text(payload, "input")) : null;
         JsonElement arguments = default;
         if (Text(payload, "type") == "local_shell_call") { if (!payload.TryGetProperty("action", out arguments)) return null; }
         else if (name is "shell" or "shell_command" or "exec_command" or "local_shell" && Text(payload, "arguments") is { Length: > 0 } json)
