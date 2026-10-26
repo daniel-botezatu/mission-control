@@ -28,6 +28,12 @@ const STATUS: Record<string, { label: string; tone: string; rank: number }> = {
   open: { label: "Open", tone: "neutral", rank: 7 },
 };
 
+const BRANCH: Record<string, { label: string; tone: string }> = {
+  ahead: { label: "Not pushed", tone: "amber" },
+  never_pushed: { label: "Never pushed", tone: "amber" },
+  unverified: { label: "Not verified", tone: "neutral" },
+};
+
 /**
  * Things waiting for a move: pull requests and review requests (GitHub CLI, cached 5 minutes), local branches not
  * pushed and drafts left at the end of a conversation. Loads only while the overview is open; nothing runs in the
@@ -87,6 +93,7 @@ export default function OpenLoopsPanel({
     .filter((pr) => pr.loop === "you")
     .sort((a, b) => rank(a) - rank(b));
   const onOthers = pullRequests.filter((pr) => pr.loop !== "you");
+  const reviewRequestTotal = ready ? (summary.reviewRequestTotal ?? 0) : 0;
   const branches = local?.branches ?? [];
   const drafts = local?.drafts ?? [];
   const githubProblem =
@@ -171,31 +178,32 @@ export default function OpenLoopsPanel({
               {githubProblem}
             </div>
           )}
-          <Group
-            label="On you"
-            items={onYou}
-            render={row}
-            moreUrl={summary?.allUrl}
-            open={open}
-          />
-          <Group
-            label="Waiting on others"
-            items={onOthers}
-            render={row}
-            moreUrl={summary?.allUrl}
-            open={open}
-          />
-          {ready &&
-            (summary.reviewRequestTotal ?? 0) >
-              (summary.reviewRequests?.length ?? 0) &&
-            summary.reviewRequestsUrl && (
+          <Group label="On you" items={onYou} render={row}>
+            {ready && reviewRequestTotal > 0 && summary.reviewRequestsUrl && (
               <button
                 className="open-loops-more"
                 onClick={() => void open(summary.reviewRequestsUrl!)}
               >
-                All review requests on GitHub <ExternalLink size={12} />
+                {reviewRequestTotal > (summary.reviewRequests?.length ?? 0)
+                  ? `All ${reviewRequestTotal} review requests on GitHub`
+                  : "Review requests on GitHub"}{" "}
+                <ExternalLink size={12} />
               </button>
             )}
+          </Group>
+          <Group label="Waiting on others" items={onOthers} render={row}>
+            {ready &&
+              summary.total > summary.items.length &&
+              summary.allUrl && (
+                <button
+                  className="open-loops-more"
+                  onClick={() => void open(summary.allUrl!)}
+                >
+                  All {summary.total} of your pull requests on GitHub{" "}
+                  <ExternalLink size={12} />
+                </button>
+              )}
+          </Group>
           {localError && (
             <div className="small-empty" role="status">
               {localError}
@@ -215,16 +223,28 @@ export default function OpenLoopsPanel({
                 <span className="pull-request-main">
                   <strong>{branch.branch}</strong>
                   <small>
-                    {branch.repository} · last commit{" "}
-                    {relative(branch.lastCommitAt)}
+                    {branch.repository}
+                    {branch.commits != null
+                      ? ` · ${branch.commits} ${branch.commits === 1 ? "commit" : "commits"} not pushed`
+                      : branch.state === "unverified"
+                        ? " · differs from its remote branch; history could not be read"
+                        : ""}{" "}
+                    · last commit {relative(branch.lastCommitAt)}
                   </small>
                 </span>
-                <Badge tone="amber">
-                  {branch.state === "ahead" ? "Not pushed" : "Never pushed"}
+                <Badge tone={BRANCH[branch.state]?.tone ?? "neutral"}>
+                  {BRANCH[branch.state]?.label ?? "Not pushed"}
                 </Badge>
               </div>
             )}
-          />
+          >
+            {(local?.branchesOmitted ?? 0) > 0 && (
+              <div className="open-loops-more">
+                {local!.branchesOmitted} more not shown: the panel lists the 50
+                most recently changed branches.
+              </div>
+            )}
+          </Group>
           <Group
             label="Drafts not sent"
             items={drafts}
@@ -263,19 +283,19 @@ function rank(pr: PullRequestItem) {
   return STATUS[pr.status]?.rank ?? 99;
 }
 
+// Shows the first few items; the rest open in place, so every loaded item can be reached.
 function Group<T>({
   label,
   items,
   render,
-  moreUrl,
-  open,
+  children,
 }: {
   label: string;
   items: T[];
   render: (item: T) => ReactNode;
-  moreUrl?: string | null;
-  open?: (url: string) => Promise<void>;
+  children?: ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!items.length) return null;
   const hidden = items.length - SHOWN;
   return (
@@ -283,18 +303,17 @@ function Group<T>({
       <h3>
         {label} <span>{items.length}</span>
       </h3>
-      {items.slice(0, SHOWN).map(render)}
-      {hidden > 0 &&
-        (moreUrl && open ? (
-          <button
-            className="open-loops-more"
-            onClick={() => void open(moreUrl)}
-          >
-            {hidden} more on GitHub <ExternalLink size={12} />
-          </button>
-        ) : (
-          <div className="open-loops-more">{hidden} more</div>
-        ))}
+      {(expanded ? items : items.slice(0, SHOWN)).map(render)}
+      {hidden > 0 && (
+        <button
+          className="open-loops-more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? "Show fewer" : `Show ${hidden} more`}
+        </button>
+      )}
+      {children}
     </div>
   );
 }

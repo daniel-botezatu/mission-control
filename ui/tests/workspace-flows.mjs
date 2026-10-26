@@ -43,6 +43,28 @@ const calls = [],
 page.on("pageerror", (e) => errors.push(e.message));
 let paused = true;
 let prUnavailable = false;
+// Review finding: more than five review requests or branches must stay reachable, with the right destinations.
+let loopsOverflow = false;
+const overflowRequest = (n) => ({
+  number: 100 + n,
+  title: `Review request ${n}`,
+  repository: "example/other",
+  url: `https://github.com/example/other/pull/${100 + n}`,
+  isDraft: false,
+  reviewDecision: null,
+  updatedAt: "2026-10-21T08:00:00Z",
+  status: "review_requested",
+  loop: "you",
+  author: "colleague",
+});
+const overflowBranch = (n) => ({
+  repository: "example/project",
+  checkout: "C:/work/project",
+  branch: `topic/branch-${n}`,
+  state: n === 6 ? "unverified" : "ahead",
+  commits: n === 6 ? null : n,
+  lastCommitAt: `2026-10-21T0${9 - Math.min(n, 9)}:00:00Z`,
+});
 let extraStatsEntries = 0;
 const projects = [
   {
@@ -154,6 +176,26 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
       catchingUp: !paused,
       pendingFiles: 4,
       pendingBytes: 64 * 1024 * 1024,
+    };
+  if (method === "pullRequests" && loopsOverflow)
+    return {
+      state: "ready",
+      login: "developer",
+      total: 0,
+      items: [],
+      checkedAt: "2026-10-21T10:00:00Z",
+      error: null,
+      allUrl: "https://github.com/search?type=pullrequests&q=authored",
+      reviewRequestTotal: 6,
+      reviewRequestsUrl: "https://github.com/search?type=pullrequests&q=review-requested",
+      reviewRequests: [1, 2, 3, 4, 5, 6].map(overflowRequest),
+    };
+  if (method === "openLoops.local" && loopsOverflow)
+    return {
+      checkedAt: "2026-10-21T10:00:00Z",
+      branches: [1, 2, 3, 4, 5, 6].map(overflowBranch),
+      branchesOmitted: 2,
+      drafts: [],
     };
   if (method === "pullRequests")
     return prUnavailable
@@ -502,6 +544,44 @@ try {
       await panel
         .getByText("Fix response serialization", { exact: true })
         .waitFor();
+    },
+  );
+  await check(
+    "Open loops keeps every loaded item reachable and links review requests to their own search",
+    async () => {
+      const panel = page.getByRole("region", { name: "Open loops" });
+      loopsOverflow = true;
+      try {
+        await panel.getByRole("button", { name: "Refresh open loops" }).click();
+        const onYou = panel.getByRole("group", { name: "On you" });
+        await onYou.getByText("Review request 5", { exact: true }).waitFor();
+        assert.equal(await onYou.getByText("Review request 6").count(), 0);
+        await onYou.getByRole("button", { name: "Show 1 more" }).click();
+        await onYou.getByText("Review request 6", { exact: true }).waitFor();
+        await onYou.getByRole("button", { name: /Review requests on GitHub/ }).click();
+        assert.ok(
+          calls.some((c) => c.method === "pullRequests.open" && c.args.url.endsWith("q=review-requested")),
+          "review requests open their own GitHub search",
+        );
+        assert.ok(
+          !calls.some((c) => c.method === "pullRequests.open" && c.args.url.endsWith("q=authored")),
+          "no authored-PR search for review requests",
+        );
+        const branches = panel.getByRole("group", { name: "Not pushed" });
+        await branches.getByText("topic/branch-5", { exact: true }).waitFor();
+        await branches.getByRole("button", { name: "Show 1 more" }).click();
+        await branches.getByText("topic/branch-6", { exact: true }).waitFor();
+        const text = await branches.innerText();
+        assert.ok(text.includes("Not verified"), "an unverifiable branch is labelled as such");
+        assert.ok(text.includes("2 commits not pushed"));
+        assert.ok(text.includes("2 more not shown"));
+        await branches.getByRole("button", { name: "Show fewer" }).click();
+        assert.equal(await branches.getByText("topic/branch-6").count(), 0);
+      } finally {
+        loopsOverflow = false;
+        await panel.getByRole("button", { name: "Refresh open loops" }).click();
+        await panel.getByText("Fix response serialization", { exact: true }).waitFor();
+      }
     },
   );
   await check(

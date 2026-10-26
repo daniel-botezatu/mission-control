@@ -123,12 +123,14 @@ export interface UnpushedBranch {
   repository: string;
   checkout: string;
   branch: string;
-  state: "ahead" | "never_pushed";
+  state: "ahead" | "never_pushed" | "unverified";
   lastCommitAt: string;
+  commits?: number | null;
 }
 
 export interface LocalOpenLoops {
   branches: UnpushedBranch[];
+  branchesOmitted?: number;
   drafts: EvidenceRecord[];
   checkedAt: string;
 }
