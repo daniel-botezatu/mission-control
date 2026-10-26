@@ -80,11 +80,12 @@ When changing the data directory, use the same directory for the desktop and set
 - Quitting: closing the window keeps the menu-bar icon; Cmd+Q, Dock > Quit and Quit completely all end both the app and its collector, and a sign-out or shutdown is not interrupted. These paths cannot be exercised on Windows.
 - Menu bar: the icon is a monochrome template that follows light and dark mode, and clicking the Dock icon reopens the dashboard.
 - Start at login: turning it on from a copy opened in Downloads or from the DMG is refused with a request to move the app to Applications. From `/Applications`, enable it, sign out and back in, and confirm the collector starts in the background. Then switch Mission Control off in System Settings > General > Login Items and confirm Settings shows the option as off; turning it back on in Mission Control should re-enable it or name the System Settings switch.
+- Open loops: commit on a new branch of an approved repository without pushing; the overview's Open loops panel lists it as never pushed, and lists it no longer once it is pushed.
 - Register both hosts (where used), run a local memory read, then separately verify personal GitHub and Slack authentication. Setup does not prove provider scopes or workspace administrator approval.
 - Test an app update and repeat setup, confirming settings, groups and approvals survive.
 - Evaluate a real day. Complete message delivery does not guarantee a complete recap: the existing 24-item comparison still has missing and partial items. Do not treat recap suggestions as an authoritative task ledger.
 
-Local history is best-effort redacted, not encrypted by Mission Control. New Unix workspace directories are owner-only; existing directories are not silently chmodded. Use the team's normal device encryption/access controls. Direct Slack responses are not intercepted by the local redactor and can enter the AI host's transcript. That previously deferred gateway remains unimplemented.
+Local history is best-effort redacted, not encrypted by Mission Control. New Unix workspace directories are owner-only; existing directories are not silently chmodded. Use the team's normal device encryption/access controls. In Claude Code, the plugin removes secret-looking values from Slack results before the model sees them; Codex Slack results are not filtered and can enter that host's transcript. The previously deferred gateway remains unimplemented.
 
 ## Updates and removal
 
