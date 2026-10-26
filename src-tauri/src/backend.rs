@@ -95,6 +95,7 @@ impl Backend {
             quitting: AtomicBool::new(false),
         });
         let reader = backend.clone();
+        let data = options.data.clone();
         tauri::async_runtime::spawn(async move {
             let mut output = BufReader::new(output);
             loop {
@@ -145,6 +146,9 @@ impl Backend {
                         let _ = reply.send(result);
                     }
                 }
+            }
+            if !reader.quitting.load(Ordering::Acquire) {
+                crate::events::record(&data, "collector stopped unexpectedly");
             }
             reader.invalidate("The local collector stopped. Quit and reopen Mission Control to recover from its last checkpoint.").await;
             let _ = app.emit("workspace-changed", ());

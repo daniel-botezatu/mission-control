@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod backend;
+mod events;
 mod instance;
 mod options;
 
@@ -86,17 +87,20 @@ fn open_dashboard(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn quit(app: &tauri::AppHandle) {
+fn quit(app: &tauri::AppHandle, reason: &str) {
     let backend = app.state::<Arc<Backend>>().inner().clone();
     if backend.quitting.swap(true, Ordering::AcqRel) {
         return;
     }
+    let data = app.state::<Options>().data.clone();
+    events::record(&data, &format!("quit: {reason}"));
     for (_, window) in app.webview_windows() {
         let _ = window.destroy();
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         backend.shutdown().await;
+        events::record(&data, "exit: collector stopped, shell exiting");
         app.exit(0);
     });
 }
@@ -122,7 +126,7 @@ async fn workspace_rpc(
         return Ok(json!({"ok":true}));
     }
     if method == "host.quit" || method == "control" && args["action"] == "quit" {
-        quit(&app);
+        quit(&app, "dashboard");
         return Ok(json!({"ok":true}));
     }
     // Host actions use a small fixed surface. Agent control and arbitrary commands are absent.
@@ -186,7 +190,7 @@ fn tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "open" => {
                 let _ = open_dashboard(app);
             }
-            "quit" => quit(app),
+            "quit" => quit(app, "tray menu"),
             action @ ("pause" | "resume") => {
                 let backend = app.state::<Arc<Backend>>().inner().clone();
                 let method = if action == "pause" {
@@ -211,6 +215,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     else {
         return Ok(());
     };
+    events::record(
+        &options.data,
+        &format!(
+            "started version={} background={}",
+            env!("CARGO_PKG_VERSION"),
+            options.background
+        ),
+    );
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -256,11 +268,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 // Cmd+Q, Dock > Quit, logout or shutdown: let the system exit now rather than
                 // cancelling it. The backend sees its pipe close and stops cleanly by itself.
                 backend.quitting.store(true, Ordering::Release);
+                let closed = WINDOW_CLOSED_AT.load(Ordering::Acquire);
+                let since = if closed == 0 {
+                    "no window closed".to_owned()
+                } else {
+                    format!(
+                        "last window closed {} ms earlier",
+                        elapsed_ms().saturating_sub(closed)
+                    )
+                };
+                events::record(
+                    &app.state::<Options>().data,
+                    &format!("exit: system request without exit code ({since})"),
+                );
                 return;
             }
             if !quitting {
                 api.prevent_exit();
-                quit(app);
+                quit(
+                    app,
+                    &format!("exit requested with code {}", code.unwrap_or_default()),
+                );
             }
         }
     });
