@@ -63,6 +63,12 @@ public sealed class ToolFactsTests
     [InlineData("$php = \"C:\\tools\\php.exe\"; & $php vendor/bin/phpunit", "test")]
     [InlineData("/c/tools/php85/php.exe -d memory_limit=2G vendor/bin/pest tests/Feature", "test")]
     [InlineData("grep -E 'Tests ' cov.log; npm test > cov.log", "")]
+    [InlineData("php vendor/bin/pest --parallel 2>&1 | grep -E 'FAIL |Tests:' | head -20; php vendor/bin/pint --test 2>&1 | tail -1", "test")]
+    [InlineData("cd /app && APP_KEY=base64:$(head -c 32 /dev/urandom | base64) DB_CONNECTION=pgsql php artisan test --parallel", "test")]
+    [InlineData("for f in $(git status --porcelain | grep '^??' | cut -c4-); do npx vitest run $f; done", "test")]
+    [InlineData("cat old-run.log | grep Tests; npm test", "")]
+    [InlineData("wsl.exe -e bash -lc 'php vendor/bin/pest 2>&1 | sed \"s/x//\" > ~/runs/a.txt; grep -E Tests: ~/runs/a.txt'", "test")]
+    [InlineData("timeout 60 wsl.exe -u root -e su postgres -c \"cd /app && vendor/bin/phpunit --testdox\"", "test")]
     // Review findings: searching a log for a command, and dry runs, perform nothing.
     [InlineData("rg 'dotnet test|Passed!' old-build.log", "")]
     [InlineData("git push --dry-run origin topic", "")]

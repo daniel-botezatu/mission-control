@@ -44,22 +44,23 @@ internal static class ShellCommands
         var written = new HashSet<string>(StringComparer.Ordinal);
         // Simple variables (PHP=/path/php.exe, $php = "C:\php\php.exe") so "$PHP" resolves to the program it names.
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        Script(script, 0);
+        Script(script, 0, false);
         return reads ? "" : string.Join(' ', Order.Where(found.Contains));
 
-        // Each returns whether it ran a fact-producing operation.
-        bool Script(string text, int depth)
+        // Each returns whether it ran a fact-producing operation. A command later in a pipeline only filters the
+        // output before it, and one inside $( ) has its output captured rather than printed.
+        bool Script(string text, int depth, bool captured)
         {
             var any = false;
             foreach (var pipeline in Parse(text))
             {
                 var producing = false;
-                foreach (var command in pipeline)
-                    if (Command(command, depth, producing)) producing = any = true;
+                for (var position = 0; position < pipeline.Count; position++)
+                    if (Command(pipeline[position].Words, depth, producing, captured || position > 0 || pipeline[position].Captured)) producing = any = true;
             }
             return any;
         }
-        bool Command(IReadOnlyList<string> words, int depth, bool filtering)
+        bool Command(IReadOnlyList<string> words, int depth, bool filtering, bool quiet)
         {
             if (words.All(word => Assignment.IsMatch(word)))
             {
@@ -68,8 +69,8 @@ internal static class ShellCommands
             }
             if (words.Count == 3 && words[0].StartsWith('$') && words[1] == "=") { variables[words[0][1..]] = words[2]; return false; }
             var (program, arguments, script, command) = Resolve(words, Expand);
-            if (script is not null) return depth < MaximumDepth && Script(script, depth + 1);
-            if (command is not null) return depth < MaximumDepth && Command(command, depth + 1, filtering);
+            if (script is not null) return depth < MaximumDepth && Script(script, depth + 1, quiet);
+            if (command is not null) return depth < MaximumDepth && Command(command, depth + 1, filtering, quiet);
             if (program is null) return false;
             if (Classify(program, arguments) is { } operation)
             {
@@ -77,11 +78,15 @@ internal static class ShellCommands
                 foreach (var target in Targets(arguments)) written.Add(target);
                 return true;
             }
-            // tee on a fact-producing command's output also writes that output.
-            if (filtering && program == "tee") foreach (var target in arguments.Where(word => !word.StartsWith('-'))) written.Add(target);
-            // A filter on a fact-producing command's own output is fine, and so is reading a file it wrote; any other
-            // reader mixes in other text.
-            if (!filtering && Reads(program, arguments) && !arguments.Any(written.Contains)) reads = true;
+            // A filter on a fact-producing command's output that writes a file (tee, or sed ... > file) writes that output.
+            if (filtering)
+            {
+                foreach (var target in Targets(arguments)) written.Add(target);
+                if (program == "tee") foreach (var target in arguments.Where(word => !word.StartsWith('-'))) written.Add(target);
+            }
+            // A reader that starts a printed pipeline mixes other text into the output, unless it reads back a file a
+            // fact-producing command wrote.
+            if (!quiet && Reads(program, arguments) && !arguments.Any(written.Contains)) reads = true;
             return false;
         }
         // Only a word that is exactly one variable ($NAME or ${NAME}) is replaced.
@@ -107,17 +112,22 @@ internal static class ShellCommands
         }
     }
 
-    /// <summary>Pipelines of simple commands, each a list of words with quoting removed.</summary>
-    internal static List<List<List<string>>> Parse(string script)
+    /// <summary>A simple command's words with quoting removed; Captured when it runs inside $( ), whose output is not printed.</summary>
+    internal sealed record Parsed(List<string> Words, bool Captured);
+
+    /// <summary>Pipelines of simple commands.</summary>
+    internal static List<List<Parsed>> Parse(string script)
     {
-        var pipelines = new List<List<List<string>>>();
-        var pipeline = new List<List<string>>();
+        var pipelines = new List<List<Parsed>>();
+        var pipeline = new List<Parsed>();
         var words = new List<string>();
         var word = new StringBuilder();
         var inWord = false;
         var heredocs = new Queue<string>();
+        // One entry per open parenthesis: true for a command substitution $( ), false for a group ( ).
+        var groups = new Stack<bool>();
         void EndWord() { if (inWord) { words.Add(word.ToString()); word.Clear(); inWord = false; } }
-        void EndCommand() { EndWord(); if (words.Count > 0) { pipeline.Add(words); words = []; } }
+        void EndCommand() { EndWord(); if (words.Count > 0) { pipeline.Add(new(words, groups.Contains(true))); words = []; } }
         void EndPipeline() { EndCommand(); if (pipeline.Count > 0) { pipelines.Add(pipeline); pipeline = []; } }
         char At(int index) => index < script.Length ? script[index] : '\0';
         for (var i = 0; i < script.Length; i++)
@@ -178,7 +188,10 @@ internal static class ShellCommands
                 var end = script.IndexOf('\n', i);
                 i = (end < 0 ? script.Length : end) - 1;
             }
-            else if (c == ';' || c is '(' or ')' or '{' or '}') EndPipeline();
+            else if (c == '$' && At(i + 1) == '(') { EndPipeline(); groups.Push(true); i++; }
+            else if (c == '(') { EndPipeline(); groups.Push(false); }
+            else if (c == ')') { EndPipeline(); groups.TryPop(out _); }
+            else if (c is ';' or '{' or '}') EndPipeline();
             else if (c == '&' && At(i + 1) == '>') { word.Append(c); inWord = true; }
             else if (c == '&' && (!inWord || At(i + 1) == '&' || At(i - 1) is ' ' or '\t'))
             {
@@ -221,7 +234,9 @@ internal static class ShellCommands
             if (i + 1 < words.Count && words[i].StartsWith('$') && words[i + 1] == "=") { i += 2; continue; }
             if (i >= words.Count) break;
             var name = Program(words[i]);
-            if (name is "sudo" or "env" or "time" or "nohup" or "command" or "exec" or "nice" or "call" or "npx" or "pnpx" or "bunx")
+            // Shell keywords that may begin a command: if npm test; then ...; for f in ...; do vitest run $f; done
+            if (name is "if" or "then" or "else" or "elif" or "do" or "while" or "until" or "!") i++;
+            else if (name is "sudo" or "env" or "time" or "nohup" or "command" or "exec" or "nice" or "call" or "npx" or "pnpx" or "bunx")
                 i = SkipOptions(words, i + 1);
             else if (name == "timeout") i = Math.Min(words.Count, SkipOptions(words, i + 1) + 1);
             else if (name is "npm" or "pnpm" or "yarn" or "bun" && i + 1 < words.Count && words[i + 1] is "exec" or "dlx" or "x")
@@ -236,6 +251,12 @@ internal static class ShellCommands
         if (Shells.Contains(program))
         {
             var flag = Array.FindIndex(arguments, word => word.Length > 1 && word[0] == '-' && word[1] != '-' && word.Contains('c'));
+            return flag >= 0 && flag + 1 < arguments.Length ? (null, [], arguments[flag + 1], null) : (program, arguments, null, null);
+        }
+        // su postgres -c "command"
+        if (program == "su")
+        {
+            var flag = Array.FindIndex(arguments, word => word is "-c" or "--command");
             return flag >= 0 && flag + 1 < arguments.Length ? (null, [], arguments[flag + 1], null) : (program, arguments, null, null);
         }
         // PowerShell and cmd join the remaining arguments into one command line, as Windows does.
