@@ -238,6 +238,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                         // nothing: every retained message is still here. Only unread bytes are missing history.
                         if (!RolloutFiles.Exists(priorPath) && !CompletelyRead(checkpoint))
                             AddGap(source.Id, "A source file was deleted before Mission Control finished reading it; its unread part cannot be recovered.");
+                        ResolveReferencedHistory(source, checkpoint, priorPath);
                     }
                     UpdateStatus(source);
                 }
@@ -402,7 +403,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 metadata.Gap = null;
                 if (previous is not null) store.CommitBatch([], previous with { MetadataJson = JsonSerializer.Serialize(metadata) });
             }
-            SetStreamGap(source.Id, streamId, metadata.Gap);
+            SetStreamGap(source.Id, streamId, EffectiveGap(metadata));
             // A checkpoint records decompressed sizes; an unchanged compressed file is recognised by its own size and time.
             var unchanged = compressed
                 ? metadata.CompressedLength == info.Length && metadata.CompressedTicks == info.LastWriteTimeUtc.Ticks
@@ -508,7 +509,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             var checkpoint = new StreamCheckpoint(source.Id, streamId, committed, fingerprint, Anchor(file, committed), length, info.LastWriteTimeUtc.Ticks, JsonSerializer.Serialize(metadata));
             token.ThrowIfCancellationRequested();
             store.CommitBatch(records, checkpoint, reinterpreting);
-            SetStreamGap(source.Id, streamId, metadata.Gap);
+            SetStreamGap(source.Id, streamId, EffectiveGap(metadata));
             if (!excludedSession)
                 foreach (var cwd in records.Select(record => record.WorkingDirectory).Append(metadata.Cwd).Where(cwd => !string.IsNullOrWhiteSpace(cwd)).Distinct(StringComparer.Ordinal))
                     WorkingDirectoryObserved?.Invoke(cwd);
@@ -569,7 +570,10 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
                 // Paginated rollouts still contain ordinary ordinal-stamped
                 // user/final response envelopes. A label alone is not a gap.
                 if (payload.TryGetProperty("history_base", out var basis) && basis.ValueKind != JsonValueKind.Null)
-                    metadata.Gap = "Referenced Codex history: only messages present in this source file are available.";
+                {
+                    metadata.Gap = ReferencedHistoryGap;
+                    (metadata.HistoryBaseThread, metadata.HistoryBaseOffset) = HistoryBase(basis);
+                }
                 yield break;
             }
             if (type == "turn_context")
@@ -827,6 +831,90 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     private static string? Empty(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;
     private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
+    private const string ReferencedHistoryGap = "Referenced Codex history: only messages present in this source file are available.";
+
+    private static (string? Thread, long Offset) HistoryBase(JsonElement basis)
+    {
+        if (basis.ValueKind != JsonValueKind.Object) return (null, 0);
+        var thread = Text(basis, "thread_id");
+        var offset = basis.TryGetProperty("end_byte_offset", out var end) && end.ValueKind == JsonValueKind.Number && end.TryGetInt64(out var value) ? value : 0;
+        return (thread.Length is > 0 and <= 64 && thread.All(c => char.IsAsciiHexDigit(c) || c == '-') ? thread.ToLowerInvariant() : null, offset);
+    }
+
+    /// <summary>
+    /// A Codex conversation that continues an earlier thread is complete once that thread's rollout
+    /// (plain or compressed) has been read at least up to the point it was continued from.
+    /// </summary>
+    private string? EffectiveGap(Metadata metadata)
+    {
+        if (metadata.Gap != ReferencedHistoryGap || metadata.HistoryBaseThread is not { } thread) return metadata.Gap;
+        if (metadata.HistoryBaseOutsideLookback) return null;
+        var suffix = thread + ".jsonl";
+        foreach (var codex in LocalSources().Where(source => source.Kind == "codex"))
+            foreach (var checkpoint in store.GetCheckpoints(codex.Id))
+                if (checkpoint.StreamId.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && checkpoint.Offset >= metadata.HistoryBaseOffset) return null;
+        return metadata.Gap;
+    }
+
+    // After a full scan the earlier thread may now be read; clear the warning then. Checkpoints written
+    // before the earlier thread was recorded learn it from the file's first line, without a re-read.
+    private void ResolveReferencedHistory(SourceConfig source, StreamCheckpoint checkpoint, string path)
+    {
+        if (source.Kind != "codex" || checkpoint.MetadataJson is not { } json) return;
+        Metadata? metadata;
+        try { metadata = JsonSerializer.Deserialize<Metadata>(json, _json); } catch (JsonException) { return; }
+        if (metadata?.Gap != ReferencedHistoryGap) return;
+        var changed = false;
+        if (metadata.HistoryBaseThread is null && RolloutFiles.Existing(path) is { } existing)
+        {
+            (metadata.HistoryBaseThread, metadata.HistoryBaseOffset) = ReadHistoryBase(existing);
+            changed = metadata.HistoryBaseThread is not null;
+        }
+        if (metadata.HistoryBaseThread is { } thread && !metadata.HistoryBaseOutsideLookback && EffectiveGap(metadata) is not null && EarlierThreadOutsideLookback(thread))
+        {
+            metadata.HistoryBaseOutsideLookback = true;
+            changed = true;
+        }
+        if (changed) store.CommitBatch([], checkpoint with { MetadataJson = JsonSerializer.Serialize(metadata) });
+        SetStreamGap(source.Id, checkpoint.StreamId, EffectiveGap(metadata));
+    }
+
+    // Looked up once per unresolved conversation; the answer is kept in its checkpoint.
+    private bool EarlierThreadOutsideLookback(string thread)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-store.LookbackDays);
+        foreach (var codex in LocalSources().Where(source => source.Kind == "codex" && Directory.Exists(source.RootPath)))
+        {
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(codex.RootPath, "*" + thread + ".jsonl*", SearchOption.AllDirectories))
+                    if ((file.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase) || RolloutFiles.IsCompressed(file)) && File.GetLastWriteTimeUtc(file) < cutoff) return true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+        return false;
+    }
+
+    /// <summary>The history_base of a rollout whose checkpoint predates recording it; reads only the first line.</summary>
+    private static (string? Thread, long Offset) ReadHistoryBase(string path)
+    {
+        try
+        {
+            using var file = RolloutFiles.Open(path);
+            var buffer = new byte[1024 * 1024];
+            var read = 0;
+            for (int n; read < buffer.Length && (n = file.Read(buffer, read, buffer.Length - read)) > 0;)
+            {
+                read += n;
+                if (Array.IndexOf(buffer, (byte)'\n', 0, read) >= 0) break;
+            }
+            var end = Array.IndexOf(buffer, (byte)'\n', 0, read);
+            using var document = JsonDocument.Parse(buffer.AsMemory(0, end < 0 ? read : end));
+            return document.RootElement.TryGetProperty("payload", out var payload) && payload.TryGetProperty("history_base", out var basis) ? HistoryBase(basis) : (null, 0);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ZstdSharp.ZstdException) { return (null, 0); }
+    }
+
     // Read to its last byte, with no partial final line still waiting for the rest of the record.
     private bool CompletelyRead(StreamCheckpoint checkpoint)
     {
@@ -978,6 +1066,11 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         // Size and time of the .jsonl.zst file last read for this stream; null when read from the plain file.
         public long? CompressedLength { get; set; }
         public long? CompressedTicks { get; set; }
+        // The earlier Codex thread this conversation continues, and how far into it.
+        public string? HistoryBaseThread { get; set; }
+        public long HistoryBaseOffset { get; set; }
+        // The earlier thread exists but is older than the configured lookback, so it is out of scope, not missing.
+        public bool HistoryBaseOutsideLookback { get; set; }
         public long ReplayBelow { get; set; }
         public int LookbackDays { get; set; }
         public bool IncludeSubagents { get; set; }

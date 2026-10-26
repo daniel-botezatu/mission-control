@@ -112,6 +112,30 @@ public sealed class CompressedRolloutTests
         Assert.Contains("deleted before Mission Control finished reading", f.Gap() ?? "", StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("complete", false)]
+    [InlineData("missing", true)]
+    [InlineData("shorter", true)]
+    [InlineData("outside-lookback", false)]
+    public async Task ContinuedCodexConversationWarnsOnlyWhileItsEarlierThreadIsUnread(string earlier, bool warned)
+    {
+        using var f = new Fixture();
+        const string baseThread = "01a0c2d3-ff21-77b1-ab3c-8f6d53f52cf3";
+        var baseContent = f.Lines("Earlier request", "Earlier answer");
+        var basePath = f.PathFor($"rollout-2026-10-21T09-00-00-{baseThread}.jsonl");
+        if (earlier != "missing") File.WriteAllBytes(basePath, baseContent);
+        // Older than the 30-day history window: excluded by configuration, not missing.
+        if (earlier == "outside-lookback") File.SetLastWriteTimeUtc(basePath, DateTime.UtcNow.AddDays(-60));
+        var continuedFrom = earlier == "shorter" ? baseContent.Length + 5000 : baseContent.Length;
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        var header = JsonSerializer.Serialize(new { type = "session_meta", timestamp = now, payload = new { id = "child", cwd = f.Cwd, cli_version = "0.162.0",
+            history_base = new { thread_id = baseThread, end_ordinal_exclusive = 4, end_byte_offset = continuedFrom } } }) + "\n";
+        var body = Encoding.UTF8.GetString(f.Lines("Later request", "Later answer", turn: "t2"));
+        File.WriteAllText(f.PathFor("rollout-2026-10-21T10-00-00-01a0cd56-2a9a-7e91-ad1c-de7e64525e10.jsonl"), header + body);
+        await f.Run();
+        Assert.Equal(warned, (f.Gap() ?? "").Contains("Referenced Codex history", StringComparison.Ordinal));
+    }
+
     private static byte[] Decompress(byte[] data)
     {
         using var input = new DecompressionStream(new MemoryStream(data));
@@ -127,6 +151,8 @@ public sealed class CompressedRolloutTests
         public WorkspaceStore Store { get; }
         public string Plain => Path.Combine(root, "2026", "10", "21", "rollout-2026-10-21T10-00-00-session.jsonl");
         public string Compressed => Plain + ".zst";
+        public string Cwd => cwd;
+        public string PathFor(string name) => Path.Combine(Path.GetDirectoryName(Plain)!, name);
 
         public Fixture()
         {
