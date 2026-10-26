@@ -39,6 +39,8 @@ public sealed class GitHubLauncherTests : IDisposable
         Assert.Equal(string.Join(',', GitHubLauncher.ReadTools), fake.ServerEnvironment["GITHUB_TOOLS"]);
         Assert.Equal("", fake.ServerEnvironment["GITHUB_TOOLSETS"]);
         Assert.Equal("https://github.com", fake.ServerEnvironment["GITHUB_HOST"]);
+        Assert.Equal("2", fake.ServerEnvironment["GOMAXPROCS"]);
+        Assert.Equal("50", fake.ServerEnvironment["GOGC"]);
         Assert.DoesNotContain("GITHUB_PERSONAL_ACCESS_TOKEN", fake.OriginalServerCommand!.Environment.Keys);
         Assert.False(fake.OriginalServerCommand.UseShellExecute);
         Assert.True(fake.OriginalServerCommand.CreateNoWindow);
@@ -162,9 +164,11 @@ public sealed class GitHubLauncherTests : IDisposable
     public async Task RealChildRelayForwardsProtocolOnlyAndDiscardsDiagnostics()
     {
         using var output = new MemoryStream();
-        using var input = new MemoryStream();
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\"}\n"));
         var runner = new GitHubProcesses(input, output);
-        var status = await runner.RelayServerAsync(Child("[Console]::Error.WriteLine('synthetic-secret-diagnostic'); [Console]::WriteLine('{\"jsonrpc\":\"2.0\",\"result\":{}}')", "printf '%s\\n' synthetic-secret-diagnostic >&2; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"result\":{}}'"), CancellationToken.None);
+        Directory.CreateDirectory(directory);
+        var cache = new StartupCache(Path.Combine(directory, "startup-cache.json"), "test");
+        var status = await runner.RelayServerAsync(_ => Task.FromResult(Child("[Console]::Error.WriteLine('synthetic-secret-diagnostic'); [Console]::WriteLine('{\"jsonrpc\":\"2.0\",\"result\":{}}')", "printf '%s\\n' synthetic-secret-diagnostic >&2; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"result\":{}}'")), cache, CancellationToken.None);
         Assert.Equal(0, status);
         var text = Encoding.UTF8.GetString(output.ToArray());
         Assert.Contains("jsonrpc", text);
@@ -234,14 +238,16 @@ public sealed class GitHubLauncherTests : IDisposable
             if (TokenError is not null) throw TokenError;
             return Task.FromResult(token);
         }
-        public Task<int> RelayServerAsync(ProcessStartInfo command, CancellationToken cancellationToken)
+        // Behaves like a host whose first request needs the server.
+        public async Task<int> RelayServerAsync(Func<CancellationToken, Task<ProcessStartInfo>> start, StartupCache cache, CancellationToken cancellationToken)
         {
+            var command = await start(cancellationToken);
             ServerStarts++;
             OriginalServerCommand = command;
             ServerArguments = command.ArgumentList.ToArray();
             ServerEnvironment = command.Environment.ToDictionary();
             OnServerStart?.Invoke();
-            return Task.FromResult(0);
+            return 0;
         }
     }
 }
