@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$McpExecutable,
     [Parameter(Mandatory)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$ExpectedSha256,
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.4.13',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.4.14',
     [ValidateSet('allow','public','ask')][string]$PrivateSlack,
     [string]$TimeZone,
     [string]$DataDirectory = (Join-Path $env:LOCALAPPDATA 'MissionControl')

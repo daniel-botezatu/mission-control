@@ -1,4 +1,4 @@
-Current release: **0.4.13** for the desktop, memory plugin and memory server. Install the desktop first, then update the plugin, and reload existing Claude and Codex sessions so they start the new server.
+Current release: **0.4.14** for the desktop, memory plugin and memory server. Install the desktop first, then update the plugin, and reload existing Claude and Codex sessions so they start the new server.
 
 Recap quality still has gaps on the full 24-item comparison; see [Known limitations](../KNOWN_LIMITATIONS.md). Reloading hosts uses the updated package and server but does not close those gaps.
 
@@ -29,7 +29,7 @@ For immediate local use (tested on 2.1.292):
 claude --plugin-dir "C:\Tools\MissionControl\host-packages\claude"
 ```
 
-The plugin supplies `/mission-control:developer-memory` and the restricted `memory-reader` agent. Ask, for example, `/mission-control:developer-memory Where did I leave off on SP last week?`. For recaps, the skill coordinates in the main conversation and spawns up to three fresh `mission-control:memory-reader` agents concurrently. Their enforced allowlist contains only local history reads and ToolSearch; no shell, edits, external providers or further delegation. The coordinator retains normal host permissions: skill `allowed-tools` preapproves reads/delegation, it does not remove other tools. Recall instructions prohibit mutations. Codex retains the full-stream fallback until a per-reader tool allowlist is verified.
+The plugin supplies `/mission-control:developer-memory` and the restricted `memory-reader` agent. Ask, for example, `/mission-control:developer-memory Where did I leave off on SP last week?`. For recaps, Claude runs the skill in a fresh `mission-control:recap-coordinator` agent with its own context, which spawns up to three fresh `mission-control:memory-reader` agents concurrently and returns only the finished recap. The readers' enforced allowlist contains only local history reads and ToolSearch; no shell, edits, external providers or further delegation. The coordinator cannot run shell commands, edit files or load other skills; it reads, delegates and checks GitHub and Slack. Recall instructions prohibit mutations. Codex coordinates in the main conversation and retains the full-stream fallback until a per-reader tool allowlist is verified.
 
 For persistent user installation, run:
 
@@ -121,6 +121,8 @@ The memory server returns one JSON text block, without a duplicate `structuredCo
 The legacy `view: "outline"` API remains compatible, but 0.4.9 recaps never call it. All assigned messages are read in full, including continuations. Required tests, blockers and ordering constraints remain in the final topic ledger until later evidence resolves them. This does not guarantee a model will never omit an item or meet a fixed token budget.
 
 On Windows, `mission-control-providers.exe github --gh-executable ABS\gh.exe --github-server ABS\github-mcp-server.exe --github-sha256 SHA256` launches the verified official GitHub server with the existing `gh auth login` credential. Only the fixed read-tool set is enabled. The launcher captures the credential in memory, passes it only to the child environment, and suppresses credential/upstream diagnostics. It does not copy tokens into plugin files or alter the GitHub CLI credential store. `configure_github_provider.py` updates only a recognized existing `mc_github` registration and checks that unrelated settings are unchanged. Sign-in can still be required if the saved login expires or is revoked; fresh server processes no longer start their own OAuth login while the existing gh credential works.
+
+Since 0.4.14 the launcher starts the server, and reads the gh credential, only on a session's first GitHub call. Until then it answers the host's startup requests (initialize and the tool, prompt and resource lists) from `github-mcp-server.exe.startup-cache.json` next to the pinned server: the server's own earlier answers, which it marks public and which contain tool descriptions only. The cache is keyed by the server's SHA-256 and the read-tool set; a session the cache cannot answer starts the server at once and refills it. A failed start answers that call with the fixed sign-in message, and the next call tries again.
 
 Slack filtering was deferred at the user's request. Private Slack/DM text still reaches the host directly and can be saved in its transcript; Mission Control's local-history redactor does not protect those remote responses. Existing Slack authentication and consent are unchanged.
 
