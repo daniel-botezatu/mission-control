@@ -11,25 +11,6 @@ public sealed class ControllerTests : IAsyncLifetime
     private static async Task<AppSnapshot> Snapshot(AppController app) => Assert.IsType<AppSnapshot>(await app.DispatchAsync("snapshot", Args()));
 
     [Fact]
-    public async Task CustomGitHubCliPathPersistsAndRejectsRelativeOrMissingExecutables()
-    {
-        var cli = Path.Combine(directory, OperatingSystem.IsWindows() ? "gh.exe" : "gh");
-        File.WriteAllText(cli, "synthetic path fixture, never executed");
-        await using (var app = new AppController(directory))
-        {
-            await app.InitializeAsync();
-            await app.DispatchAsync("saveSettings", Args(new { githubCliPath = cli }));
-            Assert.Equal(cli, app.GitHubCliPath);
-            await Assert.ThrowsAsync<ArgumentException>(() => app.DispatchAsync("saveSettings", Args(new { githubCliPath = "./gh" })));
-            Assert.Equal(cli, app.GitHubCliPath);
-        }
-        await using var restarted = new AppController(directory); await restarted.InitializeAsync();
-        Assert.Equal(cli, restarted.GitHubCliPath);
-        await restarted.DispatchAsync("saveSettings", Args(new { githubCliPath = "" }));
-        Assert.Equal("", restarted.GitHubCliPath);
-    }
-
-    [Fact]
     public async Task Approved_demo_replays_available_messages_once_across_a_paused_process_restart()
     {
         await using (var app = new AppController(directory))

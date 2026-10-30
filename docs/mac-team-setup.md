@@ -53,7 +53,7 @@ Setup generates host packages on **that Mac**, preflights the executable against
 
 New recap timezone defaults to the Mac's timezone. Pass `--time-zone Europe/London` or another IANA name to fix a different zone. Private Slack defaults to `ask`; use `--private-slack public` to exclude private conversations or `--private-slack allow` only when that person explicitly chooses it. Repeating setup preserves previous choices.
 
-For the dashboard PR overview, sign in with `gh auth login`. Finder launches automatically check Homebrew's Apple Silicon and Intel locations. A custom executable can be set in Settings → Monitoring → GitHub CLI path. GitHub Enterprise and combining multiple GitHub accounts are not supported by this overview.
+The desktop has no GitHub account integration or PR overview. GitHub CLI is optional for the separate AI-host GitHub connection; local project discovery and branch reminders require no account login.
 
 ## Adjustable locations
 
@@ -67,7 +67,6 @@ For the dashboard PR overview, sign in with `gh auth login`. Finder launches aut
 | Host CLI executables | PATH; setup `--claude-command` / `--codex-command` |
 | Recap timezone | Local machine; setup `--time-zone local` or an IANA name |
 | Private Slack consent | Per-person saved `ask`, `public` or explicit `allow` |
-| Dashboard GitHub CLI | Saved absolute path, inherited `MISSION_CONTROL_GH_EXECUTABLE`, Homebrew locations, then PATH |
 
 When changing the data directory, use the same directory for the desktop and setup; setup does not migrate or copy a database. For example, launch the app's `Contents/MacOS/mission-control` executable with `--data-dir`, then pass that path to setup. Use local storage, not an iCloud/network-shared database. macOS uses one app instance per user; simultaneous separate data-directory instances are not supported by the current Mac single-instance plugin.
 

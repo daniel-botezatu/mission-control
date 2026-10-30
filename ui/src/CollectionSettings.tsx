@@ -22,7 +22,6 @@ export default function CollectionSettings({
       await rpc("saveSettings", {
         lookbackDays: draft.lookbackDays ?? 30,
         storageLimitMb: draft.storageLimitMb ?? 1024,
-        githubCliPath: draft.githubCliPath ?? "",
       });
       onSaved(await rpc<Settings>("settings"));
       setMessage(
@@ -70,17 +69,6 @@ export default function CollectionSettings({
               setDraft({ ...draft, storageLimitMb: Number(e.target.value) })
             }
           />
-        </label>
-        <label>
-          GitHub CLI path (optional)
-          <input
-            type="text"
-            disabled={busy}
-            placeholder="Automatic discovery"
-            value={draft.githubCliPath ?? ""}
-            onChange={(e) => setDraft({ ...draft, githubCliPath: e.target.value })}
-          />
-          <small>Choose an absolute path to gh for a custom installation. Leave blank to use the standard locations. Refresh the PR overview after saving.</small>
         </label>
         <button className="button primary" disabled={busy}>
           Save collection settings

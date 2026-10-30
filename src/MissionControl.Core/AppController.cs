@@ -26,7 +26,6 @@ public sealed class AppController : IAsyncDisposable
     private LocalObserver Observer => mode == "demo" ? demoObserver : liveObserver;
     private ProjectDiscoveryService Projects => mode == "demo" ? demoProjects : liveProjects;
     public bool IsDemo => mode == "demo";
-    public string? GitHubCliPath => liveStore.GetSetting("github.cliPath");
     public AppController(string dataDir, ILegacyCredentialStore? retiredCredentials = null)
     { directory = Path.GetFullPath(dataDir); this.retiredCredentials = retiredCredentials; }
 
@@ -75,7 +74,7 @@ public sealed class AppController : IAsyncDisposable
             case "undoCorrection": Store.DeleteCorrection(Required(args, "recordId")); NotifyChanged(); return new { saved = true };
             case "sessionProject": Store.SaveSessionProject(Required(args, "sourceId"), Required(args, "sessionId"), Text(args, "projectId")); NotifyChanged(); return new { saved = true };
             case "markRead": Store.SetSetting("dashboard.last-read", DateTimeOffset.UtcNow.ToString("O")); NotifyChanged(); return new { ok = true };
-            case "settings": return new { lookbackDays = Store.LookbackDays, includeSubagents = Store.IncludeSubagents, storageLimitMb = Store.StorageLimitBytes / (1024 * 1024), retentionDays = IntSetting("retention.days", 90), githubCliPath = GitHubCliPath, startWithWindows = liveStore.GetSetting("startWithWindows", "false") == "true", telemetry = false, databaseBytes = Store.DatabaseBytes, dataDirectory = directory, lastReadAt = Store.GetSetting("dashboard.last-read"), retiredCredentials = liveStore.GetRetiredCredentialKeys().Count + demoStore.GetRetiredCredentialKeys().Count, privacy = "Only explicitly approved local projects are indexed or returned. Unknown projects are excluded. Secret filtering is best effort. No model or Slack client runs in Mission Control. The optional desktop PR overview reads through your existing GitHub CLI account." };
+            case "settings": return new { lookbackDays = Store.LookbackDays, includeSubagents = Store.IncludeSubagents, storageLimitMb = Store.StorageLimitBytes / (1024 * 1024), retentionDays = IntSetting("retention.days", 90), startWithWindows = liveStore.GetSetting("startWithWindows", "false") == "true", telemetry = false, databaseBytes = Store.DatabaseBytes, dataDirectory = directory, lastReadAt = Store.GetSetting("dashboard.last-read"), retiredCredentials = liveStore.GetRetiredCredentialKeys().Count + demoStore.GetRetiredCredentialKeys().Count, privacy = "Only explicitly approved local projects are indexed or returned. Unknown projects are excluded. Secret filtering is best effort. No model, GitHub or Slack client runs in the desktop. Repository metadata and branch reminders are read locally." };
             case "mcpConfig":
                 var binary = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "mission-control-mcp.exe" : "mission-control-mcp");
                 var quote = (string value) => WorkspacePaths.QuoteShellArgument(value, OperatingSystem.IsWindows());
@@ -123,17 +122,6 @@ public sealed class AppController : IAsyncDisposable
                 case "demoReplay":
                     if (mode != "demo") throw new InvalidOperationException("Replay is available only in Demo."); await demo.AppendChangesAsync(); break;
                 case "saveSettings":
-                    if (args.TryGetProperty("githubCliPath", out var ghPath))
-                    {
-                        var value = ghPath.GetString()?.Trim() ?? "";
-                        if (value.Length > 0)
-                        {
-                            value = WorkspacePaths.Absolute(value);
-                            if (!File.Exists(value) || Path.GetFileName(value) != (OperatingSystem.IsWindows() ? "gh.exe" : "gh"))
-                                throw new ArgumentException("Choose the existing GitHub CLI executable (gh), or leave the path blank for automatic discovery.");
-                        }
-                        liveStore.SetSetting("github.cliPath", value);
-                    }
                     if (args.TryGetProperty("lookbackDays", out var days)) Store.SetSetting("collection.lookbackDays", Math.Clamp(days.GetInt32(), 1, 36500).ToString());
                     if (args.TryGetProperty("storageLimitMb", out var storage)) Store.SetSetting("storage.limitMb", Math.Clamp(storage.GetInt32(), 64, 8192).ToString());
                     if (args.TryGetProperty("retentionDays", out var retention)) Store.SetSetting("retention.days", Math.Clamp(retention.GetInt32(), 7, 3650).ToString());

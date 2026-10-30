@@ -17,7 +17,6 @@ internal sealed class BackendApplication : IBackendApplication
     private readonly AppController _controller;
     private readonly BackendOptions _options;
     private readonly DesktopStartup _startup;
-    private readonly PullRequestOverview _pullRequests;
     private volatile bool _stopping;
     public event Action? Changed;
 
@@ -25,7 +24,6 @@ internal sealed class BackendApplication : IBackendApplication
     {
         _options = options;
         _controller = new AppController(options.DataDirectory, secrets);
-        _pullRequests = new(new GitHubOverviewReader(() => _controller.GitHubCliPath));
         _startup = new DesktopStartup(options.DataDirectory, options.ShellPath);
         _controller.SourceChanged += OnChanged;
     }
@@ -39,17 +37,6 @@ internal sealed class BackendApplication : IBackendApplication
 
     public async Task<object?> DispatchAsync(string method, JsonElement args)
     {
-        if (method == "pullRequests")
-        {
-            if (_controller.IsDemo) return new PullRequestSummary("demo", null, 0, [], null, null, null);
-            return await _pullRequests.GetAsync(args.TryGetProperty("refresh", out var refresh) && refresh.ValueKind == JsonValueKind.True);
-        }
-        if (method == "pullRequests.open")
-        {
-            var uri = _pullRequests.ResolveLink(args.TryGetProperty("url", out var link) ? link.GetString() : null);
-            using var browser = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-            return new { opened = true };
-        }
         if (method == "openExternal")
         {
             var value = args.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String ? url.GetString() : null;
@@ -79,12 +66,11 @@ internal sealed class BackendApplication : IBackendApplication
         return result;
     }
 
-    public void RequestStop() { _stopping = true; _pullRequests.RequestStop(); _controller.RequestStop(); }
+    public void RequestStop() { _stopping = true; _controller.RequestStop(); }
     private void OnChanged() => Changed?.Invoke();
     public async ValueTask DisposeAsync()
     {
         _controller.SourceChanged -= OnChanged;
         await _controller.DisposeAsync();
-        _pullRequests.Dispose();
     }
 }

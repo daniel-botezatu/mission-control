@@ -42,21 +42,10 @@ const calls = [],
   checks = [];
 page.on("pageerror", (e) => errors.push(e.message));
 let paused = true;
-let prUnavailable = false;
-// Review finding: more than five review requests or branches must stay reachable, with the right destinations.
+let localUnavailable = false;
+let localEmpty = false;
+// Branch overflow must remain reachable without any GitHub account requests.
 let loopsOverflow = false;
-const overflowRequest = (n) => ({
-  number: 100 + n,
-  title: `Review request ${n}`,
-  repository: "example/other",
-  url: `https://github.com/example/other/pull/${100 + n}`,
-  isDraft: false,
-  reviewDecision: null,
-  updatedAt: "2026-10-21T08:00:00Z",
-  status: "review_requested",
-  loop: "you",
-  author: "colleague",
-});
 const overflowBranch = (n) => ({
   repository: "example/project",
   checkout: "C:/work/project",
@@ -177,19 +166,6 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
       pendingFiles: 4,
       pendingBytes: 64 * 1024 * 1024,
     };
-  if (method === "pullRequests" && loopsOverflow)
-    return {
-      state: "ready",
-      login: "developer",
-      total: 0,
-      items: [],
-      checkedAt: "2026-10-21T10:00:00Z",
-      error: null,
-      allUrl: "https://github.com/search?type=pullrequests&q=authored",
-      reviewRequestTotal: 6,
-      reviewRequestsUrl: "https://github.com/search?type=pullrequests&q=review-requested",
-      reviewRequests: [1, 2, 3, 4, 5, 6].map(overflowRequest),
-    };
   if (method === "openLoops.local" && loopsOverflow)
     return {
       checkedAt: "2026-10-21T10:00:00Z",
@@ -197,65 +173,10 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
       branchesOmitted: 2,
       drafts: [],
     };
-  if (method === "pullRequests")
-    return prUnavailable
-      ? {
-          state: "unavailable",
-          login: null,
-          total: 0,
-          items: [],
-          checkedAt: null,
-          allUrl: null,
-          error: "GitHub could not be reached. Refresh to try again.",
-        }
-      : {
-          state: "ready",
-          login: "developer",
-          total: 2,
-          checkedAt: "2026-10-21T10:00:00Z",
-          error: null,
-          allUrl: "https://github.com/search?type=pullrequests&q=authored",
-          items: [
-            {
-              number: 42,
-              title: "Fix response serialization",
-              repository: "example/project",
-              url: "https://github.com/example/project/pull/42",
-              isDraft: false,
-              reviewDecision: "REVIEW_REQUIRED",
-              updatedAt: "2026-10-21T09:00:00Z",
-              status: "review_required",
-              loop: "others",
-            },
-            {
-              number: 43,
-              title: "Draft follow-up",
-              repository: "example/other",
-              url: "https://github.com/example/other/pull/43",
-              isDraft: true,
-              reviewDecision: null,
-              updatedAt: "2026-10-20T09:00:00Z",
-              status: "draft",
-              loop: "you",
-            },
-          ],
-          reviewRequestTotal: 1,
-          reviewRequestsUrl: "https://github.com/search?type=pullrequests&q=review",
-          reviewRequests: [
-            {
-              number: 7,
-              title: "Please review the importer",
-              repository: "example/other",
-              url: "https://github.com/example/other/pull/7",
-              isDraft: false,
-              reviewDecision: null,
-              updatedAt: "2026-10-21T08:00:00Z",
-              status: "review_requested",
-              loop: "you",
-              author: "colleague",
-            },
-          ],
-        };
+  if (method === "openLoops.local" && localUnavailable)
+    throw new Error("Local reminders could not be loaded.");
+  if (method === "openLoops.local" && localEmpty)
+    return { checkedAt: "2026-10-21T10:00:00Z", branches: [], drafts: [] };
   if (method === "openLoops.local")
     return {
       checkedAt: "2026-10-21T10:00:00Z",
@@ -270,7 +191,6 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
       ],
       drafts: [],
     };
-  if (method === "pullRequests.open") return { opened: true };
   if (method === "snapshot")
     return {
       mode: "live",
@@ -344,8 +264,14 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
     const record = allowed().find((r) => r.id === args.id);
     const body = longBodies.get(args.id);
     if (!record || !body) return record;
-    const offset = args.bodyOffset || 0, end = Math.min(body.length, offset + 12000);
-    return { ...record, body: body.slice(offset, end), bodyLength: body.length, nextBodyOffset: end < body.length ? end : null };
+    const offset = args.bodyOffset || 0,
+      end = Math.min(body.length, offset + 12000);
+    return {
+      ...record,
+      body: body.slice(offset, end),
+      bodyLength: body.length,
+      nextBodyOffset: end < body.length ? end : null,
+    };
   }
   if (method === "recordCorrection")
     return corrections.find((c) => c.recordId === args.id) || null;
@@ -412,10 +338,14 @@ await page.addInitScript(() => {
         return window.syntheticRpc({ method, args });
       },
     },
-    event: { listen: async (_name, callback) => {
-      window.syntheticChanged = callback;
-      return () => { window.syntheticChanged = undefined; };
-    } },
+    event: {
+      listen: async (_name, callback) => {
+        window.syntheticChanged = callback;
+        return () => {
+          window.syntheticChanged = undefined;
+        };
+      },
+    },
   };
 });
 const check = async (name, fn) => {
@@ -498,92 +428,68 @@ try {
     },
   );
   await check(
-    "Overview shows open loops, opens GitHub, and distinguishes unavailable from empty",
+    "Overview loads local reminders only and distinguishes unavailable from empty",
     async () => {
       await nav("Overview");
       const panel = page.getByRole("region", { name: "Open loops" });
-      await panel
-        .getByText("Fix response serialization", { exact: true })
-        .waitFor();
-      assert.ok((await panel.innerText()).includes("GitHub as developer"));
-      const onYou = panel.getByRole("group", { name: "On you" });
-      assert.deepEqual(
-        await onYou.locator(".pull-request-main strong").allInnerTexts(),
-        ["Please review the importer", "Draft follow-up"],
+      await panel.getByText("fix/unpushed-work", { exact: true }).waitFor();
+      assert.ok(!(await panel.innerText()).includes("GitHub"));
+      assert.equal(await panel.locator('[data-kind="pr"]').count(), 0);
+      assert.equal(
+        await panel.getByRole("group", { name: "On you" }).count(),
+        0,
       );
-      await panel
-        .getByRole("group", { name: "Waiting on others" })
-        .getByText("Fix response serialization", { exact: true })
-        .waitFor();
-      await panel
-        .getByRole("group", { name: "Not pushed" })
-        .getByText("fix/unpushed-work", { exact: true })
-        .waitFor();
-      assert.equal(await panel.getByRole("group", { name: "Drafts not sent" }).count(), 0);
-      await panel
-        .getByRole("button", { name: /Fix response serialization/ })
-        .click();
+      assert.equal(
+        await panel.getByRole("group", { name: "Waiting on others" }).count(),
+        0,
+      );
+      assert.equal(
+        await panel.getByRole("group", { name: "Drafts not sent" }).count(),
+        0,
+      );
+      localUnavailable = true;
+      await panel.getByRole("button", { name: "Refresh open loops" }).click();
+      await panel.getByText("Local reminders could not be loaded.").waitFor();
       assert.ok(
-        calls.some(
-          (c) =>
-            c.method === "pullRequests.open" && c.args.url.endsWith("/pull/42"),
-        ),
+        !(await panel.innerText()).includes("No local branch reminders"),
       );
-      prUnavailable = true;
+      localUnavailable = false;
+      localEmpty = true;
+      await panel.getByRole("button", { name: "Refresh open loops" }).click();
       await panel
-        .getByRole("button", { name: "Refresh open loops" })
-        .click();
-      await panel
-        .getByText("GitHub could not be reached. Refresh to try again.")
+        .getByText("No local branch reminders or conversation drafts found.")
         .waitFor();
-      assert.ok(!(await panel.innerText()).includes("no open pull requests"));
-      prUnavailable = false;
-      await panel
-        .getByRole("button", { name: "Refresh open loops" })
-        .click();
-      await panel
-        .getByText("Fix response serialization", { exact: true })
-        .waitFor();
+      localEmpty = false;
+      await panel.getByRole("button", { name: "Refresh open loops" }).click();
+      await panel.getByText("fix/unpushed-work", { exact: true }).waitFor();
+      assert.ok(
+        !calls.some((c) => c.method.startsWith("pullRequests")),
+        "No GitHub RPC during load or refresh",
+      );
     },
   );
-  await check(
-    "Open loops keeps every loaded item reachable and links review requests to their own search",
-    async () => {
-      const panel = page.getByRole("region", { name: "Open loops" });
-      loopsOverflow = true;
-      try {
-        await panel.getByRole("button", { name: "Refresh open loops" }).click();
-        const onYou = panel.getByRole("group", { name: "On you" });
-        await onYou.getByText("Review request 5", { exact: true }).waitFor();
-        assert.equal(await onYou.getByText("Review request 6").count(), 0);
-        await onYou.getByRole("button", { name: "Show 1 more" }).click();
-        await onYou.getByText("Review request 6", { exact: true }).waitFor();
-        await onYou.getByRole("button", { name: /Review requests on GitHub/ }).click();
-        assert.ok(
-          calls.some((c) => c.method === "pullRequests.open" && c.args.url.endsWith("q=review-requested")),
-          "review requests open their own GitHub search",
-        );
-        assert.ok(
-          !calls.some((c) => c.method === "pullRequests.open" && c.args.url.endsWith("q=authored")),
-          "no authored-PR search for review requests",
-        );
-        const branches = panel.getByRole("group", { name: "Not pushed" });
-        await branches.getByText("topic/branch-5", { exact: true }).waitFor();
-        await branches.getByRole("button", { name: "Show 1 more" }).click();
-        await branches.getByText("topic/branch-6", { exact: true }).waitFor();
-        const text = await branches.innerText();
-        assert.ok(text.includes("Not verified"), "an unverifiable branch is labelled as such");
-        assert.ok(text.includes("2 commits not pushed"));
-        assert.ok(text.includes("2 more not shown"));
-        await branches.getByRole("button", { name: "Show fewer" }).click();
-        assert.equal(await branches.getByText("topic/branch-6").count(), 0);
-      } finally {
-        loopsOverflow = false;
-        await panel.getByRole("button", { name: "Refresh open loops" }).click();
-        await panel.getByText("Fix response serialization", { exact: true }).waitFor();
-      }
-    },
-  );
+  await check("Open loops keeps every local branch reachable", async () => {
+    const panel = page.getByRole("region", { name: "Open loops" });
+    loopsOverflow = true;
+    try {
+      await panel.getByRole("button", { name: "Refresh open loops" }).click();
+      const branches = panel.getByRole("group", { name: "Not pushed" });
+      await branches.getByText("topic/branch-5", { exact: true }).waitFor();
+      assert.equal(await branches.getByText("topic/branch-6").count(), 0);
+      await branches.getByRole("button", { name: "Show 1 more" }).click();
+      await branches.getByText("topic/branch-6", { exact: true }).waitFor();
+      const text = await branches.innerText();
+      assert.ok(text.includes("Not verified"));
+      assert.ok(text.includes("2 commits not pushed"));
+      assert.ok(text.includes("2 more not shown"));
+      await branches.getByRole("button", { name: "Show fewer" }).click();
+      assert.equal(await branches.getByText("topic/branch-6").count(), 0);
+    } finally {
+      loopsOverflow = false;
+      await panel.getByRole("button", { name: "Refresh open loops" }).click();
+      await panel.getByText("fix/unpushed-work", { exact: true }).waitFor();
+    }
+  });
   await check(
     "Search starts with a prompt while Timeline groups messages by original date",
     async () => {
@@ -817,6 +723,7 @@ try {
     "Monitoring and privacy settings contain no inference service",
     async () => {
       await page.getByRole("tab", { name: "Monitoring", exact: true }).click();
+      assert.equal(await page.getByLabel("GitHub CLI path (optional)").count(), 0);
       await page
         .getByRole("button", { name: "Resume collection", exact: true })
         .last()

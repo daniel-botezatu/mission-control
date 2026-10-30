@@ -660,8 +660,9 @@ export default function SettingsView({
             <p>
               Install the official GitHub MCP and official Slack MCP using the
               host-specific integration package included with Mission Control.
-              Authentication happens in those services. Mission Control does not
-              request or store their tokens.
+              These connections run in Claude Code or Codex, independently of
+              this desktop. The desktop does not connect to GitHub or request or
+              store provider tokens.
             </p>
             <p>
               Use the included read-only memory workflow skills to retrieve

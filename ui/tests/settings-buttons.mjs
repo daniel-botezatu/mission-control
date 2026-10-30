@@ -21,7 +21,6 @@ if (fs.readdirSync(data).length) { console.error("MC_NATIVE_TEST_DATA_ROOT must 
 const exe = process.env.MC_DESKTOP_EXE || path.join(process.env.LOCALAPPDATA, "Mission Control", "mission-control.exe");
 const port = Number(process.env.MC_CDP_PORT || 9263);
 const closeHelper = fileURLToPath(new URL("./helpers/close-dashboard-window.ps1", import.meta.url));
-const gh = (() => { try { return execSync("where gh.exe", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split(/\r?\n/)[0].trim(); } catch { return null; } })();
 const marker = path.resolve(data).toLowerCase(); // full path, so cleanup can only match this test's processes
 
 const results = [];
@@ -67,20 +66,17 @@ try {
   await page.getByRole("tab", { name: "Monitoring" }).click();
   await page.getByLabel("History lookback (days)").fill("45");
   await page.getByLabel("Workspace storage budget (MB)").fill("2048");
-  if (gh) await page.getByLabel("GitHub CLI path (optional)").fill(gh);
   await page.getByRole("button", { name: "Save collection settings" }).click();
   await sleep(1500);
   const s1 = await rpc(page, "settings");
-  record("Save collection settings stores lookback, budget and gh path", s1.lookbackDays === 45 && s1.storageLimitMb === 2048 && (!gh || s1.githubCliPath?.toLowerCase() === gh.toLowerCase()), `lookback=${s1.lookbackDays} budget=${s1.storageLimitMb} gh=${s1.githubCliPath || "automatic"}`);
-  await page.getByLabel("GitHub CLI path (optional)").fill("C:\\Windows\\notepad.exe");
-  await page.getByRole("button", { name: "Save collection settings" }).click();
-  await sleep(1500);
-  const err = await visibleError(page);
-  record("Save collection settings rejects a program that is not gh", /GitHub CLI executable/.test(err), err.slice(0, 120));
-  await page.getByLabel("GitHub CLI path (optional)").fill("");
-  await page.getByRole("button", { name: "Save collection settings" }).click();
-  await sleep(1200);
-  record("Blank gh path returns to automatic discovery", ((await rpc(page, "settings")).githubCliPath ?? "") === "");
+  record("Save collection settings stores lookback and budget", s1.lookbackDays === 45 && s1.storageLimitMb === 2048, `lookback=${s1.lookbackDays} budget=${s1.storageLimitMb}`);
+  record("Desktop has no GitHub CLI setting", await page.getByLabel("GitHub CLI path (optional)").count() === 0 && !("githubCliPath" in s1));
+  const removed = [];
+  for (const method of ["pullRequests", "pullRequests.open"]) {
+    try { await rpc(page, method, { refresh: true, url: "https://github.com/example/project/pull/1" }); }
+    catch (error) { if (/Unsupported local memory operation/.test(String(error))) removed.push(method); }
+  }
+  record("Removed GitHub RPCs cannot query accounts or open PRs", removed.length === 2);
 
   await page.getByRole("button", { name: "Pause all", exact: true }).click();
   await sleep(1500);
