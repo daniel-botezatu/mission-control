@@ -372,7 +372,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
-    private IEnumerable<SourceConfig> LocalSources() => store.GetSources().Where(source => source.Kind is "claude" or "codex" or "fixture");
+    private IEnumerable<SourceConfig> LocalSources() => store.GetSources().Where(source => source.Kind is "claude" or "codex");
 
     private async Task ProcessFileAsync(SourceConfig source, string path, CancellationToken token)
     {
@@ -391,7 +391,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             var info = new FileInfo(path);
             var previous = store.GetCheckpoint(source.Id, streamId);
             var metadata = previous?.MetadataJson is { } metadataJson ? JsonSerializer.Deserialize<Metadata>(metadataJson, _json) ?? new() : new Metadata();
-            if (source.Kind != "fixture" && (metadata.ParserVersion != ParserVersion(source.Kind) || metadata.LookbackDays != store.LookbackDays || metadata.IncludeSubagents != store.IncludeSubagents))
+            if (metadata.ParserVersion != ParserVersion(source.Kind) || metadata.LookbackDays != store.LookbackDays || metadata.IncludeSubagents != store.IncludeSubagents)
             {
                 // A parser or scope change re-reads the file. Bytes already observed are reinterpreted,
                 // not new activity, so their records keep the observed-change time they already had.
@@ -508,7 +508,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
             var fingerprint = Prefix(file, Math.Min(128, (int)Math.Min(committed, 128)));
             // A pending final candidate can cross a bounded batch or restart. Never retain its
             // text when the originating cwd is no longer approved, even inside a checkpoint.
-            if (source.Kind != "fixture" && !store.CanIndexWorkingDirectory(metadata.Cwd)) { metadata.PendingAssistant = null; ClearTurnNotes(metadata); }
+            if (!store.CanIndexWorkingDirectory(metadata.Cwd)) { metadata.PendingAssistant = null; ClearTurnNotes(metadata); }
             NoteHistoryBaseRead(metadata);
             var checkpoint = new StreamCheckpoint(source.Id, streamId, committed, fingerprint, Anchor(file, committed), length, info.LastWriteTimeUtc.Ticks, JsonSerializer.Serialize(metadata));
             token.ThrowIfCancellationRequested();
@@ -551,14 +551,6 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     private IEnumerable<EvidenceRecord> Parse(SourceConfig source, string stream, string path, JsonElement root, Metadata metadata, DateTime fileTime, long byteOffset, Dictionary<string, bool> approvals)
     {
         var now = DateTimeOffset.UtcNow.ToString("O");
-        if (source.Kind == "fixture")
-        {
-            var fixture = root.Deserialize<EvidenceRecord>(_json) ?? throw new JsonException("Expected normalized fixture");
-            if (string.IsNullOrWhiteSpace(fixture.Id) || string.IsNullOrWhiteSpace(fixture.SessionId) || fixture.Id.Length > 4096 || fixture.SessionId.Length > 4096 || fixture.ProjectId?.Length > 4096
-                || !ValidTimestamp(fixture.Timestamp)) throw new JsonException("Invalid fixture identity or timestamp");
-            yield return fixture with { SourceId = source.Id, StreamId = stream, IngestedAt = now, Body = Redactor.Clean(fixture.Body), Title = Redactor.Clean(fixture.Title, 160), DataJson = fixture.DataJson is null ? null : Redactor.Clean(fixture.DataJson) };
-            yield break;
-        }
         var type = Text(root, "type");
         if (type.Length == 0) { metadata.Gap = "Unsupported transcript schema; records lack a recognized envelope type."; yield break; }
         JsonElement payload;
@@ -1101,7 +1093,7 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
         if (source.Environment != native && !(OperatingSystem.IsLinux() && source.Environment == "wsl")
             || source.RootPath.StartsWith("\\\\", StringComparison.Ordinal) || source.RootPath.StartsWith("//", StringComparison.Ordinal))
             return "Cross-environment/UNC observation is unsupported. Run the collector inside WSL for WSL-native history, or select a native local folder.";
-        if (source.Kind is not ("claude" or "codex" or "fixture")) return "This source adapter is not implemented.";
+        if (source.Kind is not ("claude" or "codex")) return "This source adapter is not implemented.";
         try
         {
             for (var current = Path.GetFullPath(source.RootPath); !string.IsNullOrWhiteSpace(current); current = Path.GetDirectoryName(current))
@@ -1140,7 +1132,6 @@ public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
     }
     private bool Eligible(SourceConfig source, string path)
     {
-        if (source.Kind == "fixture") return true;
         if (!store.IncludeSubagents && (path.Replace('\\', '/').Contains("/subagents/", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(path).StartsWith("agent-", StringComparison.OrdinalIgnoreCase))) return false;
         return File.GetLastWriteTimeUtc(path) >= DateTime.UtcNow.AddDays(-store.LookbackDays);
     }

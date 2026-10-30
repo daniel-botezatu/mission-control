@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { seedSyntheticHistory, waitForRecords, writeSyntheticHistory } from "./synthetic-history.mjs";
 
-// Attach only to an explicitly isolated demo release. Never probe installed user data.
+// Attach only to a release started on a fresh, explicitly isolated data directory. Never probe installed user data.
 assert.ok(
   process.env.MC_NATIVE_TEST_DATA_ROOT,
-  "Explicit isolated demo data directory required",
+  "Explicit isolated data directory required",
 );
 const cdpUrl = process.env.MC_CDP_URL || "http://127.0.0.1:9239";
 const output = path.resolve(
@@ -99,10 +100,10 @@ const screenshot = async (name) => {
   await page.screenshot({ path: file, fullPage: false });
   report.screenshots.push(file);
 };
-let snapshot, originalTheme, originalPause, correctionId;
+let snapshot, history, originalTheme, originalPause, correctionId;
 try {
   await check(
-    "Native bridge uses isolated approved-only local demo",
+    "Native bridge collects synthetic history from approved projects only",
     async () => {
       const settings = await rpc("settings");
       assert.equal(
@@ -110,7 +111,15 @@ try {
         path.resolve(process.env.MC_NATIVE_TEST_DATA_ROOT).toLowerCase(),
       );
       snapshot = await rpc("snapshot");
-      assert.equal(snapshot.mode, "demo");
+      assert.ok(
+        snapshot.projects.length === 0 && snapshot.totalRecords === 0,
+        "Start the release on a fresh isolated data directory",
+      );
+      assert.ok(snapshot.sources.every((s) => !s.enabled));
+      history = await writeSyntheticHistory(
+        path.join(process.env.MC_NATIVE_TEST_DATA_ROOT, "synthetic-history"),
+      );
+      snapshot = await seedSyntheticHistory(rpc, history);
       assert.ok(snapshot.projects.length > 0);
       assert.ok(snapshot.projects.every((p) => p.isApproved));
       assert.ok(
@@ -135,6 +144,15 @@ try {
       await page
         .getByRole("heading", { name: "Pick up where you left off." })
         .waitFor();
+      // The dashboard refreshes on collector notifications; wait until it shows the seeded history.
+      await page.waitForFunction(
+        ({ entries, projects }) =>
+          document.querySelector('[data-stat="entries"]')?.textContent ===
+            entries.toLocaleString() &&
+          document.querySelector('[data-stat="projects"]')?.textContent ===
+            String(projects),
+        { entries: snapshot.totalRecords, projects: snapshot.projects.length },
+      );
       assert.equal(await page.locator(".ask-trigger,.ask-panel").count(), 0);
       if ((await page.locator("html").getAttribute("data-theme")) !== "light")
         await page.getByRole("button", { name: "Use light theme" }).click();
@@ -297,7 +315,6 @@ try {
     async () => {
       await nav("Overview");
       const stats = await rpc("collection.stats");
-      assert.equal(stats.mode, "demo");
       assert.equal(stats.savedEntries, (await rpc("snapshot")).totalRecords);
       assert.ok(
         stats.databaseBytes >= stats.activeDatabaseBytes &&
@@ -312,7 +329,8 @@ try {
           count.toLocaleString(),
         stats.savedEntries,
       );
-      await rpc("demoReplay");
+      await history.appendLater();
+      await waitForRecords(rpc, history.count);
       const changed = await poll(
         () => rpc("collection.stats"),
         (value) => value.savedEntries > stats.savedEntries,

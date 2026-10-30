@@ -11,12 +11,12 @@ assert.ok(
 );
 assert.ok(
   process.env.MC_NATIVE_TEST_DATA_ROOT,
-  "Select the isolated demo workspace after its desktop has quit",
+  "Select the isolated workspace that native-smoke seeded, after its desktop has quit",
 );
 assert.ok(process.env.MC_UI_ARTIFACTS, "Select an explicit artifact directory");
 const executable = path.resolve(process.env.MC_MCP_EXECUTABLE);
 const dataDirectory = path.resolve(process.env.MC_NATIVE_TEST_DATA_ROOT);
-const database = path.join(dataDirectory, "demo", "workspace.db");
+const database = path.join(dataDirectory, "live", "workspace.db");
 const hash = async (file) =>
   createHash("sha256")
     .update(await readFile(file))
@@ -27,7 +27,7 @@ const report = {
   executableSha256: await hash(executable),
   databaseBefore: await hash(database),
 };
-const child = spawn(executable, ["--data-dir", dataDirectory, "--demo"], {
+const child = spawn(executable, ["--data-dir", dataDirectory], {
   stdio: ["pipe", "pipe", "pipe"],
   windowsHide: true,
 });

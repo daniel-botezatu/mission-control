@@ -5,7 +5,7 @@ namespace MissionControl.Core;
 public sealed partial class WorkspaceStore
 {
     /// <summary>Body-free counters for the visible dashboard; no collector or external requests are started.</summary>
-    public CollectionStatistics Statistics(string mode, string monitoring)
+    public CollectionStatistics Statistics(string monitoring)
     {
         lock (gate)
         {
@@ -25,7 +25,7 @@ public sealed partial class WorkspaceStore
             var pages = Convert.ToInt64(Scalar("PRAGMA page_count"), CultureInfo.InvariantCulture);
             var free = Convert.ToInt64(Scalar("PRAGMA freelist_count"), CultureInfo.InvariantCulture);
             var sources = GetStatuses().Where(source => source.Enabled).ToArray();
-            return new(mode, monitoring, entries, sessions, users, finals, events,
+            return new(monitoring, entries, sessions, users, finals, events,
                 DatabaseBytesUnsafe(), Math.Max(0, pages - free) * pageSize, StorageLimitBytes,
                 Scalar("SELECT MAX(updated_at) FROM checkpoints") as string,
                 sources.Any(source => source.State is "catching-up" or "reconciling" || source.Pending > 0),

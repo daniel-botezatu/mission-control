@@ -4,7 +4,6 @@ use std::path::PathBuf;
 pub struct Options {
     pub data: PathBuf,
     pub background: bool,
-    pub mode: Option<String>,
     pub automation_port: Option<u16>,
 }
 
@@ -25,7 +24,6 @@ impl Options {
         let mut options = Self {
             data: default.ok_or("This platform has no supported data directory")?,
             background: false,
-            mode: None,
             automation_port: None,
         };
         let mut args = std::env::args().skip(1);
@@ -33,8 +31,6 @@ impl Options {
             match arg.as_str() {
                 "--data-dir" => options.data = args.next().ok_or("Missing data directory")?.into(),
                 "--background" | "--start-hidden" => options.background = true,
-                "--live" => options.mode = Some("live".into()),
-                "--demo" => options.mode = Some("demo".into()),
                 "--automation-port" => {
                     let port = args
                         .next()

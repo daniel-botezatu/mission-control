@@ -21,7 +21,7 @@ public sealed class MemoryReliabilityTests
         Assert.DoesNotContain("Excluded personal project", coverage.GetRawText());
         var denied = await tools.CallAsync("get_session_details", JsonSerializer.SerializeToElement(new { sourceId = "source", sessionId = "missing" }));
         Assert.True(denied.IsError); Assert.Contains("coverage", denied.Json);
-        var stats = store.Statistics("live", "running");
+        var stats = store.Statistics("running");
         Assert.Equal(1980, stats.PendingBytes); Assert.Equal(1, stats.PendingFiles);
     }
 
@@ -65,7 +65,7 @@ public sealed class MemoryReliabilityTests
         using var fixture = new Fixture(); using var store = fixture.Open();
         store.CommitBatch([fixture.Record("older", "Old work") with { Timestamp = "2026-10-01T12:00:00Z", ChangedAt = "2026-10-21T20:00:00Z" },
             fixture.Record("today", "Today work") with { Timestamp = "2026-10-21T12:00:00Z", ChangedAt = "2026-10-21T12:00:00Z" }]);
-        Assert.Equal("today", store.Snapshot("live", "running").Records[0].Id);
+        Assert.Equal("today", store.Snapshot("running").Records[0].Id);
     }
 
     private static async Task<JsonElement> Call(HistoryTools tools, string name, object args)

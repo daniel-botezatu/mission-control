@@ -31,7 +31,7 @@ python3 scripts/verify-macos.py \
   --report artifacts/mac-pilot.json
 ```
 
-The Mac bundle includes the backend and memory server; the GitHub helper is Windows-only. The verifier checks sidecars, executable bits, code signatures, bundled setup resources, SQLite/demo indexing, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle, login items or provider authentication.
+The Mac bundle includes the backend and memory server; the GitHub helper is Windows-only. The verifier checks sidecars, executable bits, code signatures, bundled setup resources, indexing of synthetic Claude Code sessions, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle, login items or provider authentication.
 
 For distribution, use your organisation's Developer ID signing identity and notarization credentials through Tauri's supported environment variables. No signing identity or credentials are embedded in source. Follow [Tauri's signing/notarization instructions](https://v2.tauri.app/distribute/sign/macos/) and run the verifier with `--distribution` to require Gatekeeper acceptance and a stapled ticket. The bundled .NET executables use [Microsoft's documented apphost entitlements](https://learn.microsoft.com/en-us/dotnet/core/install/macos-notarization-issues). Test the signed result; do not disable Gatekeeper or strip quarantine to claim a release pass.
 
@@ -40,7 +40,7 @@ The current entitlements configuration applies those exceptions to the whole bun
 ## Set up each teammate
 
 1. Move the verified app to `/Applications` before configuring plugins. Do not configure a copy running from its DMG or a temporary extraction folder.
-2. Open Mission Control. Switch to Live, enable the desired local sources in Settings, and approve specific project roots. A parent workspace can group several Git repositories. No project or repository approval is inherited from the developer's PC.
+2. Open Mission Control, enable the desired local sources in Settings, and approve specific project roots. A parent workspace can group several Git repositories. No project or repository approval is inherited from the developer's PC.
 3. Check Settings → Monitoring. Defaults are `~/.claude/projects`, `~/.codex/sessions` and `~/.codex/archived_sessions`. Source roots are editable. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are also honored when the collector inherits them. Finder does not inherit a terminal's environment, so use the editable source roots for nonstandard installations.
 4. Install the desired host CLI, then run setup from Terminal. Choose `claude`, `codex` or `both`:
 

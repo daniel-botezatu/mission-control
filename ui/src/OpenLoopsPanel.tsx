@@ -12,13 +12,7 @@ const BRANCH: Record<string, { label: string; tone: string }> = {
 };
 
 /** Local branch reminders and conversation drafts; loaded only while Overview is open. */
-export default function OpenLoopsPanel({
-  mode,
-  lookup,
-}: {
-  mode: string;
-  lookup: EvidenceLookup;
-}) {
+export default function OpenLoopsPanel({ lookup }: { lookup: EvidenceLookup }) {
   const [local, setLocal] = useState<LocalOpenLoops | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -37,14 +31,11 @@ export default function OpenLoopsPanel({
     }
   };
   useEffect(() => {
-    setLocal(null);
-    setError("");
-    setLoading(false);
-    if (mode === "live") void load();
+    void load();
     return () => {
       generation.current++;
     };
-  }, [mode]);
+  }, []);
   const branches = local?.branches ?? [];
   const drafts = local?.drafts ?? [];
   const nothing = local && !error && !branches.length && !drafts.length;
@@ -57,7 +48,7 @@ export default function OpenLoopsPanel({
           <button
             className="icon-button"
             aria-label="Refresh open loops"
-            disabled={loading || mode !== "live"}
+            disabled={loading}
             onClick={() => void load()}
           >
             <RefreshCw size={15} className={loading ? "spin" : ""} />
@@ -69,11 +60,7 @@ export default function OpenLoopsPanel({
         a conversation. Branch status uses the remote references saved on this
         computer.
       </div>
-      {mode !== "live" ? (
-        <div className="small-empty">
-          Switch to Live to show your open loops.
-        </div>
-      ) : loading && !local ? (
+      {loading && !local ? (
         <div className="small-empty" role="status">
           Looking for open loops...
         </div>

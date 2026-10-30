@@ -1,7 +1,6 @@
 import { useState, type RefObject } from "react";
 import {
   Activity,
-  ArrowRight,
   Bell,
   Check,
   ChevronDown,
@@ -21,7 +20,6 @@ import {
   ShieldCheck,
   Sun,
   X,
-  Zap,
 } from "lucide-react";
 import type { AppSnapshot } from "./bridge";
 import { ProjectDot } from "./presentation";
@@ -218,7 +216,7 @@ export function Topbar({
   );
 }
 
-/** Workspace mode and collection-state notices shown above every view. */
+/** Collection-state notices shown above every view. */
 export function WorkspaceNotices({
   snapshot,
   paused,
@@ -240,7 +238,7 @@ export function WorkspaceNotices({
       return Array.isArray(saved) ? saved.filter((v): v is string => typeof v === "string").slice(-128) : [];
     } catch { return []; }
   });
-  const gapKey = (source: AppSnapshot["sources"][number]) => `${snapshot.mode}:${source.id}:${source.gap}`;
+  const gapKey = (source: AppSnapshot["sources"][number]) => `live:${source.id}:${source.gap}`;
   const gapSources = snapshot.sources.filter(s => s.enabled && s.gap && !dismissedGaps.includes(gapKey(s)));
   const dismissGaps = () => {
     const next = [...new Set([...dismissedGaps, ...gapSources.map(gapKey)])].slice(-128);
@@ -249,38 +247,6 @@ export function WorkspaceNotices({
   };
   return (
     <>
-      <div
-        className={`mode-banner ${snapshot.mode === "demo" ? "demo" : "live"}`}
-      >
-        <span>
-          {snapshot.mode === "demo" ? (
-            <Zap size={14} />
-          ) : (
-            <ShieldCheck size={14} />
-          )}
-          <strong>
-            {snapshot.mode === "demo"
-              ? "Demo workspace"
-              : "Live local workspace"}
-          </strong>
-          <span>
-            {snapshot.mode === "demo"
-              ? "Explore a realistic workday. All activity below is fixture data."
-              : "Only explicitly approved projects are indexed. Manage approval and source freshness in Settings."}
-          </span>
-        </span>
-        <button
-          disabled={!!busy}
-          onClick={() =>
-            act("mode", "mode", {
-              mode: snapshot.mode === "demo" ? "live" : "demo",
-            })
-          }
-        >
-          {snapshot.mode === "demo" ? "Switch to live" : "Explore demo"}
-          <ArrowRight size={13} />
-        </button>
-      </div>
       {snapshot.isPartial && (
         <div className="notice info" role="status">
           <span>

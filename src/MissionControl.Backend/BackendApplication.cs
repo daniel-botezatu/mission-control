@@ -14,14 +14,11 @@ internal interface IBackendApplication : IAsyncDisposable
 internal sealed class BackendApplication : IBackendApplication
 {
     private readonly AppController _controller;
-    private readonly BackendOptions _options;
     private readonly DesktopStartup _startup;
-    private volatile bool _stopping;
     public event Action? Changed;
 
     public BackendApplication(BackendOptions options)
     {
-        _options = options;
         _controller = new AppController(options.DataDirectory);
         _startup = new DesktopStartup(options.DataDirectory, options.ShellPath);
         _controller.SourceChanged += OnChanged;
@@ -30,8 +27,6 @@ internal sealed class BackendApplication : IBackendApplication
     public async Task InitializeAsync()
     {
         await _controller.InitializeAsync();
-        if (!_stopping && _options.Mode is { } mode)
-            await _controller.DispatchAsync("mode", JsonSerializer.SerializeToElement(new { mode }));
     }
 
     public async Task<object?> DispatchAsync(string method, JsonElement args)
@@ -57,7 +52,7 @@ internal sealed class BackendApplication : IBackendApplication
         return result;
     }
 
-    public void RequestStop() { _stopping = true; _controller.RequestStop(); }
+    public void RequestStop() => _controller.RequestStop();
     private void OnChanged() => Changed?.Invoke();
     public async ValueTask DisposeAsync()
     {

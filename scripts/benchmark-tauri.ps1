@@ -41,10 +41,8 @@ $quietEnd = $null
 $hardware = [ordered]@{ logicalProcessors = [Environment]::ProcessorCount; os = [Environment]::OSVersion.VersionString }
 $oldCdp = $env:MC_CDP_URL
 $oldData = $env:MC_NATIVE_TEST_DATA_ROOT
-$oldMode = $env:MC_EXPECT_MODE
 $env:MC_CDP_URL = "http://127.0.0.1:$AutomationPort"
 $env:MC_NATIVE_TEST_DATA_ROOT = $dataDirectory
-$env:MC_EXPECT_MODE = 'demo'
 
 function Launch-TestApp {
     $info = [Diagnostics.ProcessStartInfo]::new()
@@ -157,7 +155,7 @@ try {
     $machine = Get-CimInstance Win32_ComputerSystem -Property TotalPhysicalMemory -OperationTimeoutSec 10
     $hardware.cpuName = $processor.Name.Trim()
     $hardware.physicalRamBytes = [long]$machine.TotalPhysicalMemory
-    $arguments = @('--demo', '--data-dir', (Quote-Argument $dataDirectory), '--automation-port', $AutomationPort)
+    $arguments = @('--data-dir', (Quote-Argument $dataDirectory), '--automation-port', $AutomationPort)
     $root = Launch-TestApp
     Register-OwnedProcess $root 0
     $null = Drive-Dashboard 'ready'
@@ -269,10 +267,10 @@ try {
             'Private bytes and working set are separate whole-app sums. Memory averages are time weighted; peaks are sampled peaks.',
             'External PowerShell, Node/CDP driver, and CIM sampler overhead are excluded. Initial CDP readiness and lifecycle automation are outside the quiet measurement.',
             'Very short-lived children between process inventories may be missed. Exited processes retain their last observed CPU counter, a lower bound for lifecycle transitions.',
-            'Fresh synthetic demo data only. Existing app processes, credentials, and workspace directories are not used or deleted.'
+            'Fresh workspace with synthetic sample history only. Existing app processes, credentials, and workspace directories are not used or deleted.'
         )
     })
-    $env:MC_CDP_URL = $oldCdp; $env:MC_NATIVE_TEST_DATA_ROOT = $oldData; $env:MC_EXPECT_MODE = $oldMode
+    $env:MC_CDP_URL = $oldCdp; $env:MC_NATIVE_TEST_DATA_ROOT = $oldData
     if ($root) { $root.Dispose() }
 }
 if ($failure) { throw "$failure Evidence: $(Join-Path $artifactDirectory 'summary.json')" }

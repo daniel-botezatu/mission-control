@@ -118,7 +118,7 @@ public sealed partial class WorkspaceStore : IDisposable
 
     public void SaveSource(SourceConfig source)
     {
-        if (source.Kind is not ("claude" or "codex" or "fixture")) throw new ArgumentException("Only local Claude Code and Codex sources are supported.", nameof(source));
+        if (source.Kind is not ("claude" or "codex")) throw new ArgumentException("Only local Claude Code and Codex sources are supported.", nameof(source));
         ValidateIdentity(source.Id, nameof(source.Id));
         lock (gate) Execute("INSERT INTO sources(id,kind,name,root_path,enabled,environment) VALUES($id,$kind,$name,$root,$enabled,$environment) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,name=excluded.name,root_path=excluded.root_path,enabled=excluded.enabled,environment=excluded.environment",
             ("$id", source.Id), ("$kind", source.Kind), ("$name", Redactor.Clean(source.Name, 200)), ("$root", source.RootPath), ("$enabled", source.Enabled), ("$environment", source.Environment));
@@ -410,7 +410,7 @@ public sealed partial class WorkspaceStore : IDisposable
         }
     }
 
-    public AppSnapshot Snapshot(string mode, string monitoring)
+    public AppSnapshot Snapshot(string monitoring)
     {
         lock (gate)
         {
@@ -444,7 +444,7 @@ public sealed partial class WorkspaceStore : IDisposable
             var ids = summaries.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
             var corrections = Bounded(GetCorrections(ids.ToArray()).Select(c => c with { Note = null, Task = CleanNullable(c.Task, 200) }).ToArray(), budget);
             var discoveryGap = GetSetting("projects.discovery.gap") is { Length: > 0 } gap ? gap : null;
-            return new(mode, monitoring, projects, summaries, sources, corrections, Count(), SQLiteVersion, checkpoint, DatabaseBytesUnsafe(), partial, discoveryGap);
+            return new(monitoring, projects, summaries, sources, corrections, Count(), SQLiteVersion, checkpoint, DatabaseBytesUnsafe(), partial, discoveryGap);
         }
     }
 

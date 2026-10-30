@@ -115,13 +115,6 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
   useEffect(() => {
-    recordGeneration.current++;
-    setDetail(null);
-    setSelectedProject("");
-    setProjectFilter("");
-    setSourceFilter("");
-  }, [snapshot?.mode]);
-  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
@@ -433,7 +426,6 @@ export default function App() {
 
               {view === "Settings" && (
                 <SettingsView
-                  key={snapshot.mode}
                   snapshot={approvedSnapshot!}
                   paused={paused}
                   busy={busy}

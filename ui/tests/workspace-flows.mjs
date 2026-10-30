@@ -151,7 +151,6 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
   if (method === "host.version") return { version: "0.4.3" };
   if (method === "collection.stats")
     return {
-      mode: "live",
       monitoring: paused ? "paused" : "running",
       savedEntries: allowed().length + extraStatsEntries,
       sessions: 2,
@@ -193,7 +192,6 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
     };
   if (method === "snapshot")
     return {
-      mode: "live",
       monitoring: paused ? "paused" : "watching",
       projects,
       records: allowed(),
@@ -792,11 +790,12 @@ try {
     assert.deepEqual(errors, []);
     assert.ok(
       !calls.some((c) =>
-        /^(ask|ai|saveAi|testAi|remote\.|commitments|linkedTasks)/.test(
+        /^(ask|ai|saveAi|testAi|remote\.|commitments|linkedTasks|mode$|demoReplay)/.test(
           c.method,
         ),
       ),
     );
+    assert.equal(await page.getByRole("button", { name: /Explore demo|Switch to live/ }).count(), 0);
     assert.ok(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,

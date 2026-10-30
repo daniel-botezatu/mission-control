@@ -23,7 +23,7 @@ node ui/tests/settings-buttons.mjs
 
 The test checks collection settings, pause/resume, purge/retention, startup registration, close-to-tray, reopen and complete quit. It refuses to replace another instance's startup entry. `native-smoke.mjs`, `native-visibility.mjs`, `tauri-lifecycle.mjs` and `packaged-mcp-smoke.mjs` cover additional isolated UI/transport paths; follow their explicit environment requirements.
 
-For storage changes, build and run the disposable crash/replay fixtures with `scripts/crash-recovery.ps1` and `scripts/replay-restart.ps1`. Never point destructive fixtures at an existing database.
+For storage changes, build and run the disposable crash fixture with `scripts/crash-recovery.ps1`; replay across a paused restart is covered by the controller tests. Never point destructive fixtures at an existing database.
 
 ## Package and upgrade
 

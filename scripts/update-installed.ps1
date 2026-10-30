@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Security
 $memory = [IO.MemoryStream]::new()
 $archive = [IO.Compression.ZipArchive]::new($memory,[IO.Compression.ZipArchiveMode]::Create,$true)
 try {
-    foreach ($mode in @('live','demo')) {
+    foreach ($mode in @('live')) {
         $modeDirectory=Join-Path $DataDirectory $mode
         foreach ($name in @('workspace.db','workspace.db-wal','workspace.db-shm')) {
             $file=Join-Path $modeDirectory $name

@@ -15,7 +15,7 @@ public sealed class BackendPersistenceTests
         {
             await using (var original = new AppController(directory))
             {
-                await original.InitializeAsync(); await original.DispatchAsync("mode", Args(new { mode = "live" }));
+                await original.InitializeAsync();
                 await original.DispatchAsync("saveProject", Args(new { project = new ProjectInfo("saved", "Saved project", "blue", "Keep this", directory) }));
                 await original.DispatchAsync("saveSettings", Args(new { retentionDays = 180 }));
                 await original.DispatchAsync("control", Args(new { action = "pause" }));
@@ -26,7 +26,7 @@ public sealed class BackendPersistenceTests
             await using var backend = new BackendApplication(options);
             await backend.InitializeAsync();
             var snapshot = Assert.IsType<AppSnapshot>(await backend.DispatchAsync("snapshot", Args()));
-            Assert.Equal("live", snapshot.Mode); Assert.Equal("paused", snapshot.Monitoring); Assert.Empty(snapshot.Projects);
+            Assert.Equal("paused", snapshot.Monitoring); Assert.Empty(snapshot.Projects);
             var projects = Assert.IsAssignableFrom<IReadOnlyList<ProjectInfo>>(await backend.DispatchAsync("projects", Args()));
             Assert.Equal("Keep this", Assert.Single(projects).Description); Assert.False(projects[0].IsApproved);
             var settings = JsonSerializer.SerializeToElement(await backend.DispatchAsync("settings", Args()), AppController.Json);
@@ -35,15 +35,14 @@ public sealed class BackendPersistenceTests
             Assert.False(settings.TryGetProperty("retiredCredentials", out _));
             await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("remote.connections", Args()));
             await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("ask", Args()));
-            // Old frontends or saved RPC requests cannot reconnect the removed desktop provider.
-            foreach (var mode in new[] { "live", "demo" })
-            {
-                await backend.DispatchAsync("mode", Args(new { mode }));
-                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests", Args(new { refresh = true })));
-                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests.open", Args(new { url = "https://github.com/example/project/pull/1" })));
-                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("openExternal", Args(new { url = "https://code.claude.com/docs/en/mcp" })));
-                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("legacy.cleanup", Args()));
-            }
+            // Old frontends or saved RPC requests cannot reach removed features.
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests", Args(new { refresh = true })));
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests.open", Args(new { url = "https://github.com/example/project/pull/1" })));
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("openExternal", Args(new { url = "https://code.claude.com/docs/en/mcp" })));
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("legacy.cleanup", Args()));
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("mode", Args(new { mode = "demo" })));
+            await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("demoReplay", Args()));
+            Assert.Throws<ArgumentException>(() => BackendOptions.Parse(["--data-dir", directory, "--demo"]));
         }
         finally { Directory.Delete(directory, true); }
     }

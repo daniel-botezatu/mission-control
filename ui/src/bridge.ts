@@ -117,7 +117,6 @@ export interface QueryResult {
 
 export interface AppSnapshot {
   isPartial?: boolean;
-  mode: string;
   monitoring: string;
   projects: ProjectInfo[];
   records: EvidenceRecord[];
@@ -141,7 +140,6 @@ export interface Settings {
 }
 
 export interface CollectionStatistics {
-  mode: string;
   monitoring: string;
   savedEntries: number;
   sessions: number;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { seedSyntheticHistory, writeSyntheticHistory } from "./synthetic-history.mjs";
 
 // The benchmark launches the isolated release process. This helper only drives
 // its dashboard over opt-in loopback CDP; it never discovers a user's instance.
@@ -76,8 +77,13 @@ try {
     normalPath(expectedPath),
     "Refusing to control a dashboard outside the explicit test directory",
   );
-  const snapshot = await rpc("snapshot");
-  assert.equal(snapshot.mode, process.env.MC_EXPECT_MODE || "demo");
+  let snapshot = await rpc("snapshot");
+  // A fresh benchmark workspace gets the synthetic sample history so measurements include indexed data.
+  if (action === "ready" && snapshot.totalRecords === 0)
+    snapshot = await seedSyntheticHistory(
+      rpc,
+      await writeSyntheticHistory(path.join(expectedPath, "synthetic-history")),
+    );
   await page.locator(".sidebar .nav-item").first().waitFor();
   if (action !== "ready") {
     const closed = page.waitForEvent("close", { timeout: 25_000 });
@@ -102,7 +108,6 @@ try {
       action,
       passed: true,
       elapsedMs: Date.now() - started,
-      mode: snapshot.mode,
       records: snapshot.totalRecords,
       monitoring: snapshot.monitoring,
       dataDirectory: expectedPath,

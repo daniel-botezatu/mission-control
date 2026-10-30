@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Check a built Mac app with disposable demo data; never use the operator's workspace or accounts."""
+"""Check a built Mac app with disposable synthetic history; never use the operator's workspace or accounts."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,27 @@ import sys
 import tempfile
 import threading
 import time
+
+FIXTURES = Path(__file__).resolve().parent.parent / 'fixtures'
+SAMPLE_PROJECTS = [('atlas', 'Atlas API'), ('studio', 'Studio'), ('orbit', 'Orbit mobile'), ('dispatch', 'Dispatch'), ('platform', 'Platform')]
+
+
+def write_synthetic_history(root):
+    """Writes the sample conversations as ordinary Claude Code session files under root; returns the message count."""
+    rows = [json.loads(line) for line in (FIXTURES / 'sample-history.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+    shift = time.time() - 30 * 60 - datetime(2026, 10, 16, 10, tzinfo=timezone.utc).timestamp()
+    for row in rows:
+        cwd = root / 'projects' / row['project']
+        cwd.mkdir(parents=True, exist_ok=True)
+        at = datetime.fromtimestamp(datetime.fromisoformat(row['at'].replace('Z', '+00:00')).timestamp() + shift, timezone.utc)
+        message = ({'role': 'user', 'content': row['text']} if row['author'] == 'user' else
+                   {'role': 'assistant', 'id': 'msg-' + row['id'], 'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': row['text']}]})
+        line = {'type': row['author'], 'uuid': row['id'], 'sessionId': row['session'], 'cwd': str(cwd), 'gitBranch': row['branch'],
+                'timestamp': at.isoformat().replace('+00:00', 'Z'), 'message': message}
+        session = root / 'sessions' / row['project'] / (row['session'] + '.jsonl')
+        session.parent.mkdir(parents=True, exist_ok=True)
+        with session.open('a', encoding='utf-8') as file: file.write(json.dumps(line) + '\n')
+    return len(rows)
 
 
 def main():
@@ -45,7 +67,7 @@ def main():
             report['gatekeeperAndNotarizationVerified'] = True
         with tempfile.TemporaryDirectory(prefix='mission-control-mac-smoke-', dir='/private/tmp') as temporary:
             data = Path(temporary).resolve()
-            process = subprocess.Popen([str(binaries / 'mission-control-backend'), '--data-dir', str(data), '--demo'],
+            process = subprocess.Popen([str(binaries / 'mission-control-backend'), '--data-dir', str(data / 'workspace')],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8')
             replies = queue.Queue()
             def receive():
@@ -64,23 +86,34 @@ def main():
                         return item
                 raise TimeoutError('Bundled backend response deadline exceeded')
             wait_for(lambda item: item.get('event') == 'ready')
-            def rpc(method):
-                process.stdin.write(json.dumps({'id': method, 'method': method, 'args': {}}) + '\n'); process.stdin.flush()
-                return wait_for(lambda item: item.get('id') == method)['result']
+            calls = iter(range(1, 1_000_000))
+            def rpc(method, args=None):
+                request = str(next(calls))
+                process.stdin.write(json.dumps({'id': request, 'method': method, 'args': args or {}}) + '\n'); process.stdin.flush()
+                return wait_for(lambda item: item.get('id') == request)['result']
+            history = data / 'history'
+            expected = write_synthetic_history(history)
+            for project, name in SAMPLE_PROJECTS:
+                rpc('saveProject', {'project': {'id': project, 'name': name, 'color': 'blue', 'description': 'Synthetic test history', 'rootPath': str(history / 'projects' / project)}})
+                rpc('projects.approve', {'projectId': project, 'approved': True})
+            rpc('saveSource', {'source': {'id': 'synthetic-claude', 'kind': 'claude', 'name': 'Synthetic Claude Code history', 'rootPath': str(history / 'sessions'), 'enabled': True, 'environment': 'macos'}})
+            deadline = time.monotonic() + 60
             snapshot = rpc('snapshot')
-            if snapshot['mode'] != 'demo' or snapshot['totalRecords'] <= 0: raise RuntimeError('Synthetic indexing produced no demo records')
+            while snapshot['totalRecords'] != expected and time.monotonic() < deadline:
+                time.sleep(.2); snapshot = rpc('snapshot')
+            if snapshot['totalRecords'] != expected: raise RuntimeError(f"Synthetic indexing produced {snapshot['totalRecords']} of {expected} messages")
             config = rpc('mcpConfig')
             if Path(config['executablePath']).resolve() != binaries / 'mission-control-mcp': raise RuntimeError('Dashboard returned wrong MCP path')
             if Path(config['configurationPath']).resolve() != integrations: raise RuntimeError('Dashboard returned wrong setup resources path')
             rpc('monitoring.pause'); rpc('shutdown'); process.stdin.close(); process.wait(timeout=15)
             if process.returncode != 0: raise RuntimeError('Bundled backend did not stop cleanly')
-            report['demoMessages'] = snapshot['totalRecords']; report['backendAndSqliteVerified'] = True
+            report['syntheticMessages'] = snapshot['totalRecords']; report['backendAndSqliteVerified'] = True
             sys.path.insert(0, str(integrations))
             import manage
             from verify_memory_package import verify
-            report['mcp'] = verify(binaries / 'mission-control-mcp', data, manage.VERSION)
+            report['mcp'] = verify(binaries / 'mission-control-mcp', data / 'workspace', manage.VERSION)
             report['version'] = manage.VERSION
-            for directory in [data / 'live', data / 'demo']:
+            for directory in [data / 'workspace', data / 'workspace' / 'live']:
                 if directory.stat().st_mode & 0o077: raise RuntimeError('Workspace directory is accessible to other local users')
             report['newWorkspacePermissionsVerified'] = True
         report['passed'] = True

@@ -23,7 +23,6 @@ public sealed class BackendProcessTests
         };
         start.ArgumentList.Add(typeof(BackendProtocol).Assembly.Location);
         start.ArgumentList.Add("--data-dir"); start.ArgumentList.Add(directory);
-        start.ArgumentList.Add("--demo");
         using var process = Process.Start(start)!;
         try
         {
@@ -31,8 +30,10 @@ public sealed class BackendProcessTests
             await process.StandardInput.WriteLineAsync("{\"id\":\"snapshot\",\"method\":\"snapshot\",\"args\":{}}");
             await process.StandardInput.FlushAsync();
             var snapshot = await ReadUntil(process, root => root.TryGetProperty("id", out var id) && id.GetString() == "snapshot");
-            Assert.Equal("demo", snapshot.GetProperty("result").GetProperty("mode").GetString());
-            Assert.True(snapshot.GetProperty("result").GetProperty("totalRecords").GetInt32() > 0);
+            Assert.False(snapshot.GetProperty("result").TryGetProperty("mode", out _));
+            Assert.Equal("running", snapshot.GetProperty("result").GetProperty("monitoring").GetString());
+            Assert.True(File.Exists(Path.Combine(directory, "live", "workspace.db")));
+            Assert.False(Directory.Exists(Path.Combine(directory, "demo")));
             if (closePipe) process.StandardInput.Close();
             else
             {

@@ -32,7 +32,7 @@ export default function LiveIndexStats({
       inFlight = true;
       try {
         const next = await rpc<CollectionStatistics>("collection.stats");
-        if (active && dashboardVisible() && next.mode === snapshot.mode) {
+        if (active && dashboardVisible()) {
           if (baseline.current === null || next.savedEntries < baseline.current)
             baseline.current = next.savedEntries;
           setStats(next);
@@ -57,7 +57,7 @@ export default function LiveIndexStats({
       clearTimeout(timer);
       unsubscribeVisibility();
     };
-  }, [snapshot.mode]);
+  }, []);
   const paused = (stats?.monitoring || snapshot.monitoring) === "paused";
   const added =
     stats && baseline.current !== null
@@ -113,7 +113,7 @@ export default function LiveIndexStats({
             <FolderKanban size={20} />
           </span>
           <span>
-            <strong>{snapshot.projects.length}</strong>
+            <strong data-stat="projects">{snapshot.projects.length}</strong>
             <small>approved projects</small>
           </span>
         </div>

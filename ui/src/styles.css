@@ -469,51 +469,6 @@ strong {
   margin: auto;
   padding: 22px 38px 0;
 }
-.mode-banner {
-  min-height: 33px;
-  border: 1px solid #dfe8d9;
-  border-radius: 5px;
-  background: #f1f5ec;
-  color: #879177;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 11px;
-  font-size: 9px;
-  gap: 14px;
-}
-.mode-banner > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mode-banner > span > strong {
-  color: #6a795a;
-  font-size: 9px;
-  white-space: nowrap;
-}
-.mode-banner button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 9px;
-  color: #6b7c5c;
-  white-space: nowrap;
-}
-.mode-banner.live {
-  background: var(--green-bg);
-  border-color: #bad4c544;
-  color: var(--subtle);
-}
-:root[data-theme="dark"] .mode-banner {
-  background: #283329;
-  border-color: #3c4b38;
-  color: #9aa990;
-}
-:root[data-theme="dark"] .mode-banner strong,
-:root[data-theme="dark"] .mode-banner button {
-  color: #bfd0af;
-}
 .page-heading {
   display: flex;
   align-items: center;
@@ -1069,9 +1024,6 @@ h1 {
 .notice.info {
   color: var(--subtle);
   background: var(--hover);
-}
-.mode-banner + .notice {
-  margin-top: 15px;
 }
 .notice.error .icon-button {
   color: inherit;
@@ -2299,31 +2251,6 @@ h1 {
   .topbar-divider {
     display: none;
   }
-  .mode-banner {
-    padding: 9px 10px;
-    line-height: 1.6;
-    align-items: flex-start;
-  }
-  .mode-banner > span {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .mode-banner > span > span {
-    width: 100%;
-    font-size: 8px;
-  }
-  .mode-banner > span > svg {
-    height: 12px;
-    width: 12px;
-  }
-  .mode-banner > button {
-    font-size: 8px;
-    gap: 4px;
-    padding-top: 2px;
-  }
-  .mode-banner > button > svg {
-    width: 10px;
-  }
   .page-heading {
     margin: 28px 0 23px;
     align-items: flex-start;
@@ -2706,23 +2633,11 @@ h1 {
 .record-meta .meta-separator {
   color: var(--muted);
 }
-.mode-banner {
-  color: #68765b;
-}
-.mode-banner > span > strong,
-.mode-banner button {
-  color: #61714f;
-}
 .record-icon {
   color: var(--subtle);
 }
 :root[data-theme="dark"] {
   --muted: #a0ada3;
-}
-:root[data-theme="dark"] .mode-banner,
-:root[data-theme="dark"] .mode-banner > span > strong,
-:root[data-theme="dark"] .mode-banner button {
-  color: #becfaf;
 }
 @media (prefers-reduced-motion: reduce) {
   *,

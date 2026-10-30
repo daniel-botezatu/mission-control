@@ -19,10 +19,9 @@ if (command is "stress" or "seed-dashboard")
 {
     var dashboard = command == "seed-dashboard";
     var count = args.Length > 1 && int.TryParse(args[1], out var requested) ? Math.Clamp(requested, 100, 100000) : 20000;
-    var database = Path.Combine(dataDirectory, dashboard ? "demo/workspace.db" : "large.db");
+    var database = Path.Combine(dataDirectory, dashboard ? "live/workspace.db" : "large.db");
     if (File.Exists(database)) throw new InvalidOperationException("Use a fresh disposable data directory.");
     using var store = new WorkspaceStore(database);
-    if (dashboard) await new DemoWorkspace(Path.Combine(dataDirectory, "demo"), store).InitializeAsync();
     var root = Path.Combine(dataDirectory, "benchmark-project"); Directory.CreateDirectory(root);
     store.SaveProject(new("benchmark", "Benchmark", "#5470cc", "Synthetic history only", root)); store.SetProjectApproval("benchmark", true);
     store.SaveSource(new("benchmark", "codex", "Synthetic history", Path.Combine(dataDirectory, "sessions"), true));
@@ -61,7 +60,7 @@ if (command is "collect" or "approve")
 }
 await using var controller = new AppController(dataDirectory);
 await controller.InitializeAsync();
-var method = command switch { "snapshot" => "snapshot", "pause" => "monitoring.pause", "resume" => "monitoring.resume", "append" => "demoReplay", _ => throw new ArgumentException("Commands: snapshot, pause, resume, append, approve --root PATH, collect [--watch], stress [count], seed-dashboard [count]. Use --data-dir PATH.") };
-await controller.DispatchAsync(method, JsonSerializer.SerializeToElement(command == "append" ? new { action = "append" } : (object)new { }));
+var method = command switch { "snapshot" => "snapshot", "pause" => "monitoring.pause", "resume" => "monitoring.resume", _ => throw new ArgumentException("Commands: snapshot, pause, resume, approve --root PATH, collect [--watch], stress [count], seed-dashboard [count]. Use --data-dir PATH.") };
+await controller.DispatchAsync(method, JsonSerializer.SerializeToElement(new { }));
 Print((await controller.DispatchAsync("snapshot", JsonSerializer.SerializeToElement(new { })))!);
 

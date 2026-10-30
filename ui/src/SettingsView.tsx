@@ -99,7 +99,7 @@ export default function SettingsView({
     return () => {
       active = false;
     };
-  }, [snapshot.mode, queryVersion, attempt]);
+  }, [queryVersion, attempt]);
   useEffect(() => {
     if (settingsTab !== "MCP integration") return;
     let active = true;
@@ -113,7 +113,7 @@ export default function SettingsView({
     return () => {
       active = false;
     };
-  }, [settingsTab, snapshot.mode, setError]);
+  }, [settingsTab, setError]);
   useEffect(() => {
     if (!exclude || approving) return;
     const cancel = (event: KeyboardEvent) => {
@@ -330,7 +330,6 @@ export default function SettingsView({
             </div>
             <button
               className="button secondary"
-              disabled={snapshot.mode === "demo"}
               onClick={() =>
                 setNewSource({
                   id: `local-${Date.now()}`,
@@ -348,12 +347,6 @@ export default function SettingsView({
               Add source
             </button>
           </div>
-          {snapshot.mode === "demo" && (
-            <div className="notice info">
-              Demo fixture sources are isolated from your real conversation
-              history.
-            </div>
-          )}
           {sources.map((s) => (
             <div className="source-config panel" key={s.id}>
               <div className="source-config-heading">
@@ -386,7 +379,7 @@ export default function SettingsView({
                 </button>
                 <button
                   className="button secondary small"
-                  disabled={!!busy || snapshot.mode === "demo"}
+                  disabled={!!busy}
                   onClick={() =>
                     act(
                       "source",
@@ -556,10 +549,6 @@ export default function SettingsView({
           <section className="panel settings-section">
             <h2>Storage & freshness</h2>
             <dl className="diagnostics-list">
-              <div>
-                <dt>Workspace</dt>
-                <dd>{titleCase(snapshot.mode)}</dd>
-              </div>
               <div>
                 <dt>Collector</dt>
                 <dd>{titleCase(snapshot.monitoring)}</dd>

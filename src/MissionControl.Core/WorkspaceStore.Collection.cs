@@ -72,9 +72,7 @@ public sealed partial class WorkspaceStore
             {
                 var scoped = options with { Search = null, Since = null, Person = null, Kind = "message", State = null, SourceId = record.SourceId, SessionId = record.SessionId };
                 var (humanWhere, humanParameters) = Predicate(scoped);
-                // Demo fixtures intentionally retain their named speaker labels. Recognize
-                // those only inside the synthetic replay source, never in real transcripts.
-                humanWhere += " AND (lower(r.author)='user' OR (r.source_id='demo-replay' AND lower(r.author) IN ('alex','you') AND EXISTS(SELECT 1 FROM sources demo WHERE demo.id=r.source_id AND demo.kind='fixture') AND CASE WHEN json_valid(r.data_json) THEN json_extract(r.data_json,'$.synthetic')=1 ELSE 0 END)) AND trim(r.body)<>''";
+                humanWhere += " AND lower(r.author)='user' AND trim(r.body)<>''";
                 var humanFrom = " FROM evidence r LEFT JOIN corrections c ON c.record_id=r.id " + humanWhere;
                 var title = Scalar("SELECT COALESCE(NULLIF(trim(r.title),''),substr(r.body,1,160))" + humanFrom + " ORDER BY r.timestamp,r.id LIMIT 1", humanParameters) as string;
                 var preview = Scalar("SELECT substr(r.body,1,512)" + humanFrom + " ORDER BY r.timestamp DESC,r.id LIMIT 1", humanParameters) as string;

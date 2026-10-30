@@ -206,7 +206,7 @@ public sealed class McpIntegrationTests
     [Fact]
     public void Invalid_options_do_not_fall_back_to_unscoped_default_workspace()
     {
-        foreach (var options in new[] { new[] { "--data-dir", "relative" }, ["--project"], ["--live", "--demo"], ["--project", "a", "--project", "b"], ["--http"], ["--database", "relative"], ["--database", Path.GetFullPath("any.db"), "--live"], ["--since", "yesterday"], ["--since", "2026-10-21T00:00:00Z", "--until", "2026-10-20T00:00:00Z"] })
+        foreach (var options in new[] { new[] { "--data-dir", "relative" }, ["--project"], ["--demo"], ["--project", "a", "--project", "b"], ["--http"], ["--database", "relative"], ["--database", Path.GetFullPath("any.db"), "--live"], ["--since", "yesterday"], ["--since", "2026-10-21T00:00:00Z", "--until", "2026-10-20T00:00:00Z"] })
             Assert.Throws<ArgumentException>(() => McpOptions.Parse(options));
     }
 

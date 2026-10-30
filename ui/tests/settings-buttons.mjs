@@ -1,4 +1,4 @@
-// Real-app check of the Settings buttons on Windows: drives an isolated desktop instance (demo data,
+// Real-app check of the Settings buttons on Windows: drives an isolated desktop instance (empty data,
 // explicit throwaway data folder) over loopback CDP and verifies each button's actual effect.
 //
 //   set MC_NATIVE_TEST_DATA_ROOT=C:\path\to\new-empty-folder
@@ -30,7 +30,7 @@ const runKey = () => { try { return execSync('reg query "HKCU\\Software\\Microso
 const ours = () => execSync(`powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains('${marker.replace(/'/g, "''")}') } | ForEach-Object { '{0}|{1}' -f $_.ProcessId, $_.Name }"`, { encoding: "utf8" }).split(/\r?\n/).filter(Boolean).map(line => { const [pid, name] = line.split("|"); return { pid: Number(pid), name }; });
 const running = () => ours().map(p => p.name).filter(n => n.startsWith("mission-control"));
 const closeDashboardWindow = pid => Number(execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${closeHelper}" -ProcessId ${pid}`, { encoding: "utf8" }).trim() || 0);
-const launch = () => spawn(exe, ["--demo", "--data-dir", data, "--automation-port", String(port)], { stdio: "ignore" });
+const launch = () => spawn(exe, ["--data-dir", data, "--automation-port", String(port)], { stdio: "ignore" });
 
 async function dashboard(timeout = 45000) {
   const start = Date.now();
@@ -148,7 +148,7 @@ try {
     await Promise.race([exited, sleep(30000)]);
     await sleep(1500);
     const left = running();
-    const wal = path.join(data, "demo", "workspace.db-wal");
+    const wal = path.join(data, "live", "workspace.db-wal");
     const pending = fs.existsSync(wal) && fs.statSync(wal).size > 0;
     record("Quit completely exits every process and saves the database", shell.exitCode !== null && left.length === 0 && !pending, `exit=${shell.exitCode} remaining=[${left.join(", ")}] walPending=${pending}`);
   }

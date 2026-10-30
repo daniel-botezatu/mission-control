@@ -185,11 +185,7 @@ export default function EvidenceListView({
                 : "Follow messages across conversations, grouped by day. Newest source timestamps appear first."}
           </p>
         </div>
-        <Badge tone={snapshot.mode === "demo" ? "amber" : "neutral"}>
-          {snapshot.mode === "demo"
-            ? "Fixture-backed evidence"
-            : "Stored evidence"}
-        </Badge>
+        <Badge tone="neutral">Stored evidence</Badge>
       </div>
       <div className="filter-bar">
         {view !== "Timeline" ? (

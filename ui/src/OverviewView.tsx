@@ -67,7 +67,7 @@ export default function OverviewView({
       <LiveIndexStats snapshot={snapshot} />
       <div className="dashboard-grid">
         <div className="dashboard-main">
-          <OpenLoopsPanel mode={snapshot.mode} lookup={lookup} />
+          <OpenLoopsPanel lookup={lookup} />
           <section className="panel recent-panel">
             <SectionHeader
               label="Recent conversation activity"

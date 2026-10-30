@@ -20,15 +20,15 @@ public sealed class StoreTests
             fixture.Record("other-source") with { SourceId = "second", SessionId = "session" },
             fixture.Record("excluded") with { WorkingDirectory = fixture.Root + "-private" }
         ], Checkpoint(12));
-        var statistics = store.Statistics("live", "running");
+        var statistics = store.Statistics("running");
         Assert.Equal(303, statistics.SavedEntries); Assert.Equal(302, statistics.Sessions);
         Assert.Equal(301, statistics.UserMessages); Assert.Equal(1, statistics.FinalResponses); Assert.Equal(1, statistics.StatusEvents);
         Assert.True(statistics.CatchingUp); Assert.NotNull(statistics.LastCheckpoint);
         Assert.True(statistics.DatabaseBytes > 0); Assert.True(statistics.ActiveDatabaseBytes > 0);
         Assert.True(statistics.ActiveDatabaseBytes <= statistics.DatabaseBytes); Assert.Equal(store.StorageLimitBytes, statistics.StorageLimitBytes);
-        Assert.Equal(250, store.Snapshot("live", "running").Records.Count);
+        Assert.Equal(250, store.Snapshot("running").Records.Count);
         store.SetProjectApproval("work", false);
-        var revoked = store.Statistics("live", "running");
+        var revoked = store.Statistics("running");
         Assert.Equal(0, revoked.SavedEntries); Assert.Equal(0, revoked.Sessions); Assert.Equal(0, revoked.UserMessages);
         Assert.Equal(0, revoked.FinalResponses); Assert.Equal(0, revoked.StatusEvents);
     }
@@ -197,7 +197,7 @@ public sealed class StoreTests
             using var command = db.CreateCommand(); command.CommandText = "UPDATE evidence SET working_directory=$cwd WHERE id='one'"; command.Parameters.AddWithValue("$cwd", Path.Combine(fixture.Directory,"personal")); command.ExecuteNonQuery();
         }
         Assert.Empty(store.Query(new()).Records); Assert.Empty(store.QuerySessions(new()).Records); Assert.Null(store.GetRecord("one")); Assert.Equal(0, store.Count());
-        Assert.Empty(store.Snapshot("live", "running").Records);
+        Assert.Empty(store.Snapshot("running").Records);
         Assert.Equal(1, store.PurgeExcludedHistory());
         Assert.Equal(0L, fixture.Scalar("SELECT COUNT(*) FROM evidence_fts WHERE evidence_fts MATCH 'walrus'"));
     }

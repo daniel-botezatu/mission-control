@@ -10,7 +10,7 @@ public sealed class ObserverTests
     public async Task Dashboard_refresh_is_queued_while_catchup_is_still_running_and_pause_stops_it()
     {
         await using var fixture = new WorkspaceFixture();
-        await Append(fixture.File("queued.jsonl"), Fixture("queued"));
+        await Append(fixture.File("queued.jsonl"), Message("queued"));
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
         fixture.Observer.WorkingDirectoryObserved += _ => { entered.TrySetResult(); Assert.True(release.Wait(TimeSpan.FromSeconds(10))); };
@@ -23,7 +23,7 @@ public sealed class ObserverTests
             fixture.Observer.RequestPause(); release.Set();
             await fixture.Observer.PauseAsync().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal("paused", fixture.Observer.MonitoringState);
-            Assert.NotNull(fixture.Store.GetRecord("queued"));
+            Assert.NotNull(Find(fixture.Store, "queued"));
         }
         finally { release.Set(); }
     }
@@ -37,24 +37,24 @@ public sealed class ObserverTests
     }
 
     [Fact]
-    public async Task DemoReplayRecoversExactlyOnceAcrossPauseAndCompleteRestart()
+    public async Task ReplayRecoversExactlyOnceAcrossPauseAndCompleteRestart()
     {
         var root = NewRoot();
         try
         {
             var sources = Path.Combine(root, "sources"); Directory.CreateDirectory(sources);
             var file = Path.Combine(sources, "events.jsonl");
-            await Append(file, Fixture("initial"));
+            await Append(file, Message("initial"));
             using (var store = new WorkspaceStore(Path.Combine(root, "workspace.db")))
             {
                 ApproveSynthetic(store);
-                store.SaveSource(new("fixture", "fixture", "Synthetic replay", sources, true));
+                store.SaveSource(new("synthetic", "claude", "Synthetic replay", sources, true));
                 await using var observer = new LocalObserver(store);
                 await observer.StartAsync();
                 Assert.Equal(1, store.Count());
-                store.SaveCorrection(new("initial", Task: "User-linked task", Dismissed: true));
+                store.SaveCorrection(new(Find(store, "initial")!.Id, Task: "User-linked task", Dismissed: true));
                 await observer.PauseAsync();
-                await Append(file, Fixture("offline"), Fixture("initial"));
+                await Append(file, Message("offline"), Message("initial"));
                 await observer.ReconcileAsync();
                 Assert.Equal(1, store.Count());
                 Assert.Equal("paused", observer.MonitoringState);
@@ -71,8 +71,8 @@ public sealed class ObserverTests
                 await observer.ReconcileAsync();
                 Assert.Equal(2, store.Count());
                 var records = store.Query(new(Limit: 20)).Records;
-                Assert.All(records, record => Assert.Equal("fixture", record.SourceId));
-                Assert.All(records, record => Assert.Equal(DateTimeOffset.Parse("2026-10-01T10:00:00Z"), DateTimeOffset.Parse(record.Timestamp)));
+                Assert.All(records, record => Assert.Equal("synthetic", record.SourceId));
+                Assert.All(records, record => Assert.Equal(DateTimeOffset.Parse(At), DateTimeOffset.Parse(record.Timestamp)));
                 Assert.All(records, record => Assert.False(string.IsNullOrWhiteSpace(record.IngestedAt)));
             }
         }
@@ -84,18 +84,18 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("partial.jsonl");
-        await Append(file, Fixture("first"));
+        await Append(file, Message("first"));
         var completeLength = new FileInfo(file).Length;
-        var encoded = JsonSerializer.Serialize(Fixture("second"));
+        var encoded = JsonSerializer.Serialize(Message("second"));
         await File.AppendAllTextAsync(file, encoded[..20]);
         await fixture.Observer.StartAsync();
         Assert.Equal(1, fixture.Store.Count());
-        Assert.Equal(completeLength, fixture.Store.GetCheckpoint("fixture", "partial.jsonl")!.Offset);
+        Assert.Equal(completeLength, fixture.Store.GetCheckpoint("synthetic", "partial.jsonl")!.Offset);
         Assert.Equal("catching-up", Assert.Single(fixture.Store.GetStatuses()).State);
         await File.AppendAllTextAsync(file, encoded[20..] + "\n");
         await fixture.Observer.ReconcileAsync();
         Assert.Equal(2, fixture.Store.Count());
-        Assert.Equal(new FileInfo(file).Length, fixture.Store.GetCheckpoint("fixture", "partial.jsonl")!.Offset);
+        Assert.Equal(new FileInfo(file).Length, fixture.Store.GetCheckpoint("synthetic", "partial.jsonl")!.Offset);
         Assert.Equal("current", Assert.Single(fixture.Store.GetStatuses()).State);
     }
 
@@ -104,18 +104,18 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("rotation.jsonl");
-        await Append(file, Fixture("first"), Fixture("second"));
+        await Append(file, Message("first"), Message("second"));
         await fixture.Observer.StartAsync();
         await fixture.Observer.PauseAsync();
         await File.WriteAllTextAsync(file, "");
-        await Append(file, Fixture("first"));
+        await Append(file, Message("first"));
         await fixture.Observer.ResumeAsync();
         Assert.Equal(2, fixture.Store.Count());
         // Both messages remain retained after the available source is replayed.
         Assert.Null(Assert.Single(fixture.Store.GetStatuses()).Gap);
         await fixture.Observer.PauseAsync();
         File.Move(file, fixture.File("rotation-old.jsonl"));
-        await Append(file, Fixture("replacement"));
+        await Append(file, Message("replacement"));
         await fixture.Observer.ResumeAsync();
         Assert.Equal(3, fixture.Store.Count());
         await fixture.Observer.ReconcileAsync();
@@ -127,13 +127,13 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("many.jsonl");
-        await Append(file, Enumerable.Range(0, 750).Select(index => Fixture("record-" + index)).ToArray());
+        await Append(file, Enumerable.Range(0, 750).Select(index => Message("record-" + index)).ToArray());
         await fixture.Observer.StartAsync();
         // Records/checkpoints commit before the worker publishes its completed source status.
         await Until(() => fixture.Store.Count() == 750 && Assert.Single(fixture.Store.GetStatuses()).State == "current");
         Assert.Equal(750, fixture.Store.Query(new(Limit: 1000)).Total);
         Assert.Equal("current", Assert.Single(fixture.Store.GetStatuses()).State);
-        var checkpoint = fixture.Store.GetCheckpoint("fixture", "many.jsonl")!;
+        var checkpoint = fixture.Store.GetCheckpoint("synthetic", "many.jsonl")!;
         Assert.Equal(new FileInfo(file).Length, checkpoint.Offset);
     }
 
@@ -174,7 +174,7 @@ public sealed class ObserverTests
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("broken.jsonl");
         await File.WriteAllTextAsync(file, "{invalid json}\n");
-        await Append(file, Fixture("valid"));
+        await Append(file, Message("valid"));
         await fixture.Observer.StartAsync();
         Assert.Equal(1, fixture.Store.Count());
         Assert.Equal("gap", Assert.Single(fixture.Store.GetStatuses()).State);
@@ -189,24 +189,24 @@ public sealed class ObserverTests
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("oversized.jsonl");
         await File.WriteAllTextAsync(file, "{\"payload\":\"" + new string('x', 5 * 1024 * 1024) + "\"}\n");
-        await Append(file, Fixture("after-large"));
+        await Append(file, Message("after-large"));
         await fixture.Observer.StartAsync();
         await Until(() => fixture.Store.Count() == 1);
         Assert.Contains("Oversized", Assert.Single(fixture.Store.GetStatuses()).Gap);
-        Assert.Equal(new FileInfo(file).Length, fixture.Store.GetCheckpoint("fixture", "oversized.jsonl")!.Offset);
+        Assert.Equal(new FileInfo(file).Length, fixture.Store.GetCheckpoint("synthetic", "oversized.jsonl")!.Offset);
     }
 
     [Fact]
     public async Task DisabledAndUnsupportedEnvironmentsAreNeverRead()
     {
         await using var fixture = new WorkspaceFixture();
-        await Append(fixture.File("available.jsonl"), Fixture("not-imported"));
-        fixture.Store.SaveSource(new("fixture", "fixture", "Disabled", fixture.SourceRoot, false));
-        fixture.Store.SaveSource(new("wsl", "fixture", "WSL", fixture.SourceRoot, true, "wsl"));
-        fixture.Store.SaveSource(new("missing", "fixture", "Missing", Path.Combine(fixture.SourceRoot, "missing"), true));
+        await Append(fixture.File("available.jsonl"), Message("not-imported"));
+        fixture.Store.SaveSource(new("synthetic", "claude", "Disabled", fixture.SourceRoot, false));
+        fixture.Store.SaveSource(new("wsl", "claude", "WSL", fixture.SourceRoot, true, "wsl"));
+        fixture.Store.SaveSource(new("missing", "claude", "Missing", Path.Combine(fixture.SourceRoot, "missing"), true));
         await fixture.Observer.StartAsync();
         Assert.Equal(0, fixture.Store.Count());
-        Assert.Equal("disabled", fixture.Store.GetStatuses().Single(source => source.Id == "fixture").State);
+        Assert.Equal("disabled", fixture.Store.GetStatuses().Single(source => source.Id == "synthetic").State);
         Assert.Equal("unsupported", fixture.Store.GetStatuses().Single(source => source.Id == "wsl").State);
         Assert.Equal("unavailable", fixture.Store.GetStatuses().Single(source => source.Id == "missing").State);
     }
@@ -216,15 +216,15 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var file = fixture.File("dates.jsonl");
-        await Append(file, Fixture("invalid-date") with { Timestamp = "not-a-date" }, Fixture("valid-date"));
+        await Append(file, Message("invalid-date", "not-a-date"), Message("valid-date"));
         await fixture.Observer.StartAsync();
         Assert.Equal(1, fixture.Store.Count());
-        Assert.NotNull(fixture.Store.GetRecord("valid-date"));
-        Assert.Null(fixture.Store.GetRecord("invalid-date"));
+        Assert.NotNull(Find(fixture.Store, "valid-date"));
+        Assert.Null(Find(fixture.Store, "invalid-date"));
         Assert.Equal("gap", Assert.Single(fixture.Store.GetStatuses()).State);
-        await Append(file, Fixture("later-date"));
+        await Append(file, Message("later-date"));
         await Until(() => fixture.Store.Count() == 2);
-        Assert.NotNull(fixture.Store.GetRecord("later-date"));
+        Assert.NotNull(Find(fixture.Store, "later-date"));
     }
 
     [Fact]
@@ -236,11 +236,11 @@ public sealed class ObserverTests
         try
         {
             var sourceRoot = Path.Combine(root, "sources"); Directory.CreateDirectory(sourceRoot);
-            var file = Path.Combine(sourceRoot, "gone.jsonl"); await Append(file, Fixture("retained"));
+            var file = Path.Combine(sourceRoot, "gone.jsonl"); await Append(file, Message("retained"));
             using (var store = new WorkspaceStore(Path.Combine(root, "workspace.db")))
             {
                 ApproveSynthetic(store);
-                store.SaveSource(new("fixture", "fixture", "Synthetic", sourceRoot, true));
+                store.SaveSource(new("synthetic", "claude", "Synthetic", sourceRoot, true));
                 await using var observer = new LocalObserver(store); await observer.StartAsync();
             }
             File.Delete(file);
@@ -262,7 +262,7 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         for (var file = 0; file < 80; file++)
-            await Append(fixture.File($"batch-{file}.jsonl"), Enumerable.Range(0, 80).Select(index => Fixture($"{file}-{index}")).ToArray());
+            await Append(fixture.File($"batch-{file}.jsonl"), Enumerable.Range(0, 80).Select(index => Message($"{file}-{index}")).ToArray());
         var startup = fixture.Observer.StartAsync();
         await Task.Delay(5);
         await fixture.Observer.PauseAsync().WaitAsync(TimeSpan.FromSeconds(3));
@@ -322,11 +322,11 @@ public sealed class ObserverTests
             Assert.Equal("paused", fixture.Observer.MonitoringState);
         }
         var stoppedAt = fixture.Store.Count();
-        await Append(fixture.File("after-race.jsonl"), Fixture("after-race"));
+        await Append(fixture.File("after-race.jsonl"), Message("after-race"));
         await Task.Delay(450);
         Assert.Equal(stoppedAt, fixture.Store.Count());
         await fixture.Observer.ResumeAsync();
-        Assert.NotNull(fixture.Store.GetRecord("after-race"));
+        Assert.NotNull(Find(fixture.Store, "after-race"));
     }
 
     [Fact]
@@ -334,14 +334,14 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var lateRoot = Path.Combine(fixture.SourceRoot, "late");
-        fixture.Store.SaveSource(new("fixture", "fixture", "Late source", lateRoot, true));
+        fixture.Store.SaveSource(new("synthetic", "claude", "Late source", lateRoot, true));
         await fixture.Observer.StartAsync();
         Assert.Equal("unavailable", Assert.Single(fixture.Store.GetStatuses()).State);
         Directory.CreateDirectory(lateRoot);
-        var path = Path.Combine(lateRoot, "late.jsonl"); await Append(path, Fixture("initial-late"));
+        var path = Path.Combine(lateRoot, "late.jsonl"); await Append(path, Message("initial-late"));
         await fixture.Observer.ReconcileAsync();
         Assert.Equal(1, fixture.Store.Count());
-        await Append(path, Fixture("watched-late"));
+        await Append(path, Message("watched-late"));
         await Until(() => fixture.Store.Count() == 2);
     }
 
@@ -353,18 +353,18 @@ public sealed class ObserverTests
         {
             var selected = Path.Combine(root, "selected"); var outside = Path.Combine(root, "outside");
             Directory.CreateDirectory(selected); Directory.CreateDirectory(outside);
-            var outsideFile = Path.Combine(outside, "evidence.jsonl"); await Append(outsideFile, Fixture("outside"));
+            var outsideFile = Path.Combine(outside, "evidence.jsonl"); await Append(outsideFile, Message("outside"));
             // Explicit opt-in run fails clearly if the current account cannot create symlinks.
             Directory.CreateSymbolicLink(Path.Combine(selected, "nested"), outside);
             File.CreateSymbolicLink(Path.Combine(selected, "leaf.jsonl"), outsideFile);
             var linkedRoot = Path.Combine(root, "linked-root"); Directory.CreateSymbolicLink(linkedRoot, outside);
             using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             ApproveSynthetic(store);
-            store.SaveSource(new("fixture", "fixture", "Selected", selected, true));
-            store.SaveSource(new("linked", "fixture", "Linked root", linkedRoot, true));
+            store.SaveSource(new("synthetic", "claude", "Selected", selected, true));
+            store.SaveSource(new("linked", "claude", "Linked root", linkedRoot, true));
             await using var observer = new LocalObserver(store); await observer.StartAsync();
             Assert.Equal(0, store.Count());
-            Assert.Equal("gap", store.GetStatuses().Single(source => source.Id == "fixture").State);
+            Assert.Equal("gap", store.GetStatuses().Single(source => source.Id == "synthetic").State);
             Assert.Equal("unsupported", store.GetStatuses().Single(source => source.Id == "linked").State);
         }
         finally { Directory.Delete(root, true); }
@@ -385,7 +385,10 @@ public sealed class ObserverTests
     }
 
     private static object Codex(string type, object payload) => new { timestamp = "2026-10-01T10:00:00Z", type, payload };
-    private static EvidenceRecord Fixture(string id) => new(id, "fixture", "ignored", "session", "synthetic", "claude", "message", id, "Synthetic body " + id, "user", "2026-10-01T10:00:00Z", "", WorkingDirectory: Path.GetTempPath(), State: "unknown", DataJson: "{\"schema\":\"memory-v1\",\"phase\":\"user\"}");
+    private static readonly string At = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+    // A Claude Code user message in the approved synthetic project, identified by its source uuid.
+    private static object Message(string id, string? timestamp = null) => new { type = "user", uuid = id, sessionId = "session", cwd = Path.GetTempPath(), timestamp = timestamp ?? At, message = new { role = "user", content = "Synthetic body " + id } };
+    private static EvidenceRecord? Find(WorkspaceStore store, string id) => store.Query(new(Limit: 100)).Records.SingleOrDefault(record => record.Body == "Synthetic body " + id);
     private static void ApproveSynthetic(WorkspaceStore store)
     {
         store.SaveProject(new("synthetic", "Synthetic", "blue", "Test-only explicit consent", Path.GetTempPath()));
@@ -407,12 +410,12 @@ public sealed class ObserverTests
         public string SourceRoot { get; }
         public WorkspaceStore Store { get; }
         public LocalObserver Observer { get; }
-        public WorkspaceFixture(string kind = "fixture")
+        public WorkspaceFixture(string kind = "claude")
         {
             SourceRoot = Path.Combine(root, "sources"); Directory.CreateDirectory(SourceRoot);
             Store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             ApproveSynthetic(Store);
-            Store.SaveSource(new("fixture", kind, "Synthetic source", SourceRoot, true));
+            Store.SaveSource(new("synthetic", kind, "Synthetic source", SourceRoot, true));
             Observer = new(Store);
         }
         public string File(string name) => Path.Combine(SourceRoot, name);

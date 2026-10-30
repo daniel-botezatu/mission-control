@@ -79,11 +79,11 @@ class PortabilityTests(unittest.TestCase):
                          'src/.mcp.json', 'integrations/config.toml.mission-control-owned.json',
                          'src/session.jsonl', 'src/session.jsonl.zst', 'src/credentials.pem',
                          'src-tauri/icons/android/mipmap-hdpi/ic_launcher.png', 'src-tauri/icons/StoreLogo.png',
-                         'src-tauri/icons/icon.png', 'fixtures/demo.jsonl']:
+                         'src-tauri/icons/icon.png', 'fixtures/sample.jsonl']:
                 path = root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('synthetic')
             output = root / 'out.zip'; source_package.package(root, output)
             with zipfile.ZipFile(output) as archive:
-                self.assertEqual(['docs/team.md', 'fixtures/demo.jsonl', 'src-tauri/icons/icon.png', 'src/app.cs'], sorted(archive.namelist()))
+                self.assertEqual(['docs/team.md', 'fixtures/sample.jsonl', 'src-tauri/icons/icon.png', 'src/app.cs'], sorted(archive.namelist()))
             with self.assertRaises(FileExistsError): source_package.package(root, output)
 
     def test_native_codex_appended_tables_are_preserved_without_adopting_edits(self):
@@ -100,9 +100,9 @@ class PortabilityTests(unittest.TestCase):
             self.assertIn(host_tables.strip(), target.read_text())
             owned = target.read_text().split(manage.BEGIN, 1)[1].split(manage.END, 1)[0]
             self.assertNotIn('[plugins.', owned)
-            target.write_text(original.replace('--live', '--demo').replace(manage.END, host_tables + manage.END))
+            target.write_text(original.replace('--live', '--live-edited').replace(manage.END, host_tables + manage.END))
             with self.assertRaises(ValueError): manage.modify_config(args)
-            self.assertIn('--demo', target.read_text())
+            self.assertIn('--live-edited', target.read_text())
 
     @unittest.skipIf(os.name == 'nt', 'Native Unix executable permissions require macOS/Linux')
     def test_executable_preflight_preserves_unix_execute_bit(self):

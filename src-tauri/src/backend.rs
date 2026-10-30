@@ -71,9 +71,6 @@ impl Backend {
             .arg(&options.data)
             .arg("--shell-path")
             .arg(shell);
-        if let Some(mode) = &options.mode {
-            command.arg(format!("--{mode}"));
-        }
         command
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

@@ -6,7 +6,7 @@ Recap quality still has gaps on the full 24-item comparison; see [Known limitati
 
 For a Mac pilot, use [the Mac setup guide](../docs/mac-team-setup.md) and `setup.py` on the recipient's computer. It detects Mac bundle locations, supports custom data/host paths, preserves choices and registers only selected hosts with `--install`. New users default to their local timezone and `ask` for private Slack. Never distribute packages generated from the builder's profile.
 
-Use absolute paths and the existing data directory. After a separate memory-plugin update, use the versioned executable reported by `scripts/update-memory-plugin.ps1` or recorded in `%LOCALAPPDATA%\MissionControl\host-packages\installation.json`. Live approved history is the default; Demo is only for tests.
+Use absolute paths and the existing data directory. After a separate memory-plugin update, use the versioned executable reported by `scripts/update-memory-plugin.ps1` or recorded in `%LOCALAPPDATA%\MissionControl\host-packages\installation.json`.
 
 ## Prepare native packages
 

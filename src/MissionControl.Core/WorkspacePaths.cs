@@ -31,7 +31,7 @@ public static class WorkspacePaths
 
     public static void CreatePrivateDirectory(string path)
     {
-        // An owner-only parent protects SQLite, WAL, backups and demo transcripts together.
+        // An owner-only parent protects SQLite, WAL and backups together.
         // Never chmod an existing user-selected parent or follow a symlink to tighten its mode.
         if (OperatingSystem.IsWindows()) Directory.CreateDirectory(path);
         else Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

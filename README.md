@@ -8,7 +8,7 @@ Windows x64 is tested. Mac packaging supports Apple Silicon and Intel, but a sig
 
 ## Use the desktop
 
-1. Open Mission Control and switch to Live.
+1. Open Mission Control. A new installation starts empty: nothing is read until you enable a source and approve a project.
 2. In Settings > Monitoring, enable the local Claude/Codex session folders to observe.
 3. In Settings > Approved projects, approve specific project roots. Discovery never grants permission. A parent workspace groups nested Git repositories into one project using local repository/worktree metadata.
 4. Resume collection. Search, Sessions and Timeline work without an AI host. Closing the dashboard keeps the collector in the tray; Quit completely stops it.

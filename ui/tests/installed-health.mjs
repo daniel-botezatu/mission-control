@@ -31,7 +31,6 @@ try {
   console.log(
     JSON.stringify({
       healthy: true,
-      mode: snapshot.mode,
       monitoring: snapshot.monitoring,
       records: snapshot.totalRecords,
       projects: snapshot.projects.length,

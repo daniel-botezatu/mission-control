@@ -14,7 +14,7 @@ internal static class Program
             var options = McpOptions.Parse(args);
             if (!File.Exists(options.DatabasePath))
             {
-                await Console.Error.WriteLineAsync("Mission Control MCP: workspace database does not exist. Open Mission Control first, or select an existing --data-dir and --live/--demo workspace.");
+                await Console.Error.WriteLineAsync("Mission Control MCP: workspace database does not exist. Open Mission Control first, or select an existing --data-dir.");
                 return 2;
             }
             // Validation only: opening this process must never create, migrate, collect, or touch a vault.

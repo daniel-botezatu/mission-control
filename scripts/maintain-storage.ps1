@@ -43,10 +43,8 @@ if (-not $VersionsOnly) {
             } finally { $memory.Dispose(); [Array]::Clear($plain, 0, $plain.Length) }
         }
         $candidates += $backups | Select-Object -Skip 2
-        foreach ($mode in @('live','demo')) {
-            $migrationRoot = Assert-OwnedPath (Join-Path $taskData ($mode + '\migration-backups'))
-            $candidates += Get-ChildItem -LiteralPath $migrationRoot -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^workspace-v\d+-\d{8}T\d+-[a-f0-9]{8}\.sqlite$' }
-        }
+        $migrationRoot = Assert-OwnedPath (Join-Path $taskData 'live\migration-backups')
+        $candidates += Get-ChildItem -LiteralPath $migrationRoot -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^workspace-v\d+-\d{8}T\d+-[a-f0-9]{8}\.sqlite$' }
     }
 }
 $versionRoot = Assert-OwnedPath (Join-Path $taskData 'mcp')
