@@ -11,7 +11,24 @@ DIRECTORIES = {'src', 'src-tauri', 'ui', 'tests', 'scripts', 'integrations', 'fi
 FILES = {'README.md', 'ARCHITECTURE.md', 'BENCHMARKS.md', 'FINAL_INTEGRATION_CHECKLIST.md',
          'KNOWN_LIMITATIONS.md', 'RESEARCH.md', 'Directory.Build.props', 'global.json', 'MissionControl.slnx', '.gitignore'}
 EXCLUDE = {'node_modules', 'bin', 'obj', 'target', 'binaries', 'gen', 'dist', '__pycache__',
-           'TestResults', 'test-results', 'playwright-report', '.local', '.git', '.vs', '.aws', '.codex', '.claude', '.agents'}
+           'TestResults', 'test-results', 'playwright-report', '.local', '.git', '.vs', '.aws', '.codex', '.claude', '.agents',
+           '.ssh', '.idea', '.vscode', 'host-packages'}
+PRIVATE_FILES = {'.DS_Store', 'Thumbs.db', 'desktop.ini', '.mcp.json', '.claude.json'}
+GENERATED_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.pyc', '.pfx', '.p12', '.pem', '.key', '.user',
+                      '.log', '.tmp', '.bak', '.zip', '.exe', '.dll', '.pdb', '.dmg'}
+DESKTOP_ICONS = {'icon.ico', 'icon.icns', 'icon.png', 'icon.svg', 'tray-template.png'}
+
+
+def excluded_file(path, root):
+    name = path.name
+    relative = path.relative_to(root)
+    if relative.parts[:2] == ('src-tauri', 'icons') and (len(relative.parts) != 3 or name not in DESKTOP_ICONS):
+        return True
+    if name.endswith(('.jsonl', '.jsonl.zst')) and relative.parts[0] != 'fixtures':
+        return True
+    return (name in PRIVATE_FILES or name.startswith(('.env', '.mission-control-'))
+            or name.endswith('.mission-control-owned.json') or path.suffix.lower() in GENERATED_SUFFIXES
+            or name.endswith(('.db-wal', '.db-shm', '.db-journal', '.sqlite-wal', '.sqlite-shm', '.sqlite3-wal', '.sqlite3-shm')))
 
 
 def redirected(path):
@@ -31,7 +48,7 @@ def source_files(root):
                 children[:] = sorted(name for name in children if name not in EXCLUDE and not redirected(Path(directory) / name))
                 for name in sorted(names):
                     path = Path(directory) / name
-                    if redirected(path) or name.startswith('.env') or path.suffix.lower() in {'.db', '.sqlite', '.pyc', '.pfx', '.p12', '.pem', '.key', '.user'} or name.endswith(('.db-wal', '.db-shm')):
+                    if redirected(path) or excluded_file(path, root):
                         continue
                     yield path
 

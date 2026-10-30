@@ -73,11 +73,17 @@ class PortabilityTests(unittest.TestCase):
             root = Path(temporary)
             for name in ['src/app.cs', 'src/.env', '.aws/credentials', '.vs/state', 'artifacts/private-history.json',
                          'src/obj/build.json', 'ui/node_modules/local.js', 'integrations/__pycache__/a.pyc',
-                         'src-tauri/binaries/mission-control-mcp.exe', 'docs/team.md']:
+                         'src-tauri/binaries/mission-control-mcp.exe', 'docs/team.md', 'src/local.sqlite3',
+                         'src/local.sqlite3-wal', 'ui/debug.log', 'src/output.zip', 'ui/.DS_Store',
+                         'integrations/host-packages/installation.json', 'src/.claude/settings.json',
+                         'src/.mcp.json', 'integrations/config.toml.mission-control-owned.json',
+                         'src/session.jsonl', 'src/session.jsonl.zst', 'src/credentials.pem',
+                         'src-tauri/icons/android/mipmap-hdpi/ic_launcher.png', 'src-tauri/icons/StoreLogo.png',
+                         'src-tauri/icons/icon.png', 'fixtures/demo.jsonl']:
                 path = root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('synthetic')
             output = root / 'out.zip'; source_package.package(root, output)
             with zipfile.ZipFile(output) as archive:
-                self.assertEqual(['docs/team.md', 'src/app.cs'], sorted(archive.namelist()))
+                self.assertEqual(['docs/team.md', 'fixtures/demo.jsonl', 'src-tauri/icons/icon.png', 'src/app.cs'], sorted(archive.namelist()))
             with self.assertRaises(FileExistsError): source_package.package(root, output)
 
     def test_native_codex_appended_tables_are_preserved_without_adopting_edits(self):

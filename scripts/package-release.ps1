@@ -12,14 +12,15 @@ $build=Join-Path $taskRoot 'src-tauri/target/x86_64-pc-windows-msvc/release'
 $portable=Join-Path $releaseRoot 'MissionControl-windows-x64'
 New-Item -ItemType Directory -Path $portable | Out-Null
 foreach ($name in @('mission-control.exe','mission-control-backend.exe','mission-control-mcp.exe','mission-control-providers.exe')) { Copy-Item -LiteralPath (Join-Path $build $name) -Destination (Join-Path $portable $name) }
-Copy-Item -LiteralPath (Join-Path $taskRoot 'integrations') -Destination (Join-Path $portable 'integrations') -Recurse
-# Exclude development-only host probes and Python cache from the portable app.
-$testPath=[IO.Path]::GetFullPath((Join-Path $portable 'integrations/tests'))
-if (-not $testPath.StartsWith($releaseRoot+[IO.Path]::DirectorySeparatorChar)) { throw 'Unexpected staging path.' }
-if (Test-Path -LiteralPath $testPath) { Remove-Item -LiteralPath $testPath -Recurse -Force }
-$cachePath=[IO.Path]::GetFullPath((Join-Path $portable 'integrations/__pycache__'))
-if (-not $cachePath.StartsWith($releaseRoot+[IO.Path]::DirectorySeparatorChar)) { throw 'Unexpected cache path.' }
-if (Test-Path -LiteralPath $cachePath) { Remove-Item -LiteralPath $cachePath -Recurse -Force }
+# Use the same allowlist as the installer; never recursively copy local host packages or probes.
+$planJson = & node (Join-Path $taskRoot 'scripts/build-tauri.mjs') --arch x64 --plan
+if ($LASTEXITCODE -ne 0) { throw 'Cannot read the Windows integration package manifest.' }
+$plan = $planJson | ConvertFrom-Json
+foreach ($name in $plan.integrationFiles) {
+    $destination = Join-Path $portable ('integrations/' + $name)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $taskRoot ('integrations/' + $name)) -Destination $destination
+}
 foreach ($name in @('README.md','KNOWN_LIMITATIONS.md','BENCHMARKS.md','FINAL_INTEGRATION_CHECKLIST.md')) { Copy-Item -LiteralPath (Join-Path $taskRoot $name) -Destination (Join-Path $portable $name) }
 $installerName="Mission Control_${Version}_x64-setup.exe"
 Copy-Item -LiteralPath (Join-Path $build ('bundle/nsis/'+$installerName)) -Destination (Join-Path $releaseRoot $installerName)
