@@ -135,6 +135,8 @@ export interface Settings {
   includeSubagents?: boolean;
   retentionDays: number;
   startWithWindows: boolean;
+  /** False on macOS, where people add the app under System Settings > General > Login Items. */
+  startupSupported?: boolean;
   telemetry: false;
   dataDirectory?: string;
 }

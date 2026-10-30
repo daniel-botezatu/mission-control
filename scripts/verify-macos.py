@@ -48,7 +48,7 @@ def main():
     integrations = app / 'Contents/Resources/integrations'
     report = {'platform': platform.platform(), 'architecture': platform.machine(), 'passed': False,
               'realHistoryRead': False, 'accountToolsCalled': False, 'uiLifecycleVerified': False,
-              'loginItemVerified': False, 'distributionChecksRequested': args.distribution}
+              'distributionChecksRequested': args.distribution}
     process = None
     try:
         if (binaries / 'mission-control-providers').exists():

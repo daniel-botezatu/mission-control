@@ -31,7 +31,7 @@ python3 scripts/verify-macos.py \
   --report artifacts/mac-pilot.json
 ```
 
-The Mac bundle includes the backend and memory server; the GitHub helper is Windows-only. The verifier checks sidecars, executable bits, code signatures, bundled setup resources, indexing of synthetic Claude Code sessions, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle, login items or provider authentication.
+The Mac bundle includes the backend and memory server; the GitHub helper is Windows-only. The verifier checks sidecars, executable bits, code signatures, bundled setup resources, indexing of synthetic Claude Code sessions, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle or provider authentication.
 
 For distribution, use your organisation's Developer ID signing identity and notarization credentials through Tauri's supported environment variables. No signing identity or credentials are embedded in source. Follow [Tauri's signing/notarization instructions](https://v2.tauri.app/distribute/sign/macos/) and run the verifier with `--distribution` to require Gatekeeper acceptance and a stapled ticket. The bundled .NET executables use [Microsoft's documented apphost entitlements](https://learn.microsoft.com/en-us/dotnet/core/install/macos-notarization-issues). Test the signed result; do not disable Gatekeeper or strip quarantine to claim a release pass.
 
@@ -78,7 +78,7 @@ When changing the data directory, use the same directory for the desktop and set
 - Close/reopen from the menu bar; minimize/restore; Quit completely; verify no orphan collector. Measure idle CPU/memory on representative history.
 - Quitting: closing the window keeps the menu-bar icon; Cmd+Q, Dock > Quit and Quit completely all end both the app and its collector, and a sign-out or shutdown is not interrupted. These paths cannot be exercised on Windows.
 - Menu bar: the icon is a monochrome template that follows light and dark mode, and clicking the Dock icon reopens the dashboard.
-- Start at login: turning it on from a copy opened in Downloads or from the DMG is refused with a request to move the app to Applications. From `/Applications`, enable it, sign out and back in, and confirm the collector starts in the background. Then switch Mission Control off in System Settings > General > Login Items and confirm Settings shows the option as off; turning it back on in Mission Control should re-enable it or name the System Settings switch.
+- Start at login: the app has no login-item setting on macOS; Settings points to System Settings > General > Login Items. Add Mission Control there from `/Applications`, sign out and back in, and confirm the dashboard opens and the collector runs.
 - Open loops: commit on a new branch of an approved repository without pushing; the overview's Open loops panel lists it as never pushed, and lists it no longer once it is pushed.
 - Register both hosts (where used), run a local memory read, then separately verify personal GitHub and Slack authentication. Setup does not prove provider scopes or workspace administrator approval.
 - Test an app update and repeat setup, confirming settings, groups and approvals survive.

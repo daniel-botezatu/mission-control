@@ -481,27 +481,34 @@ export default function SettingsView({
                 Purge excluded history
               </button>
             </div>
-            <label className="checkbox-label startup-option">
-              <input
-                type="checkbox"
-                checked={settings.startWithWindows}
-                onChange={async (e) => {
-                  const checked = e.target.checked;
-                  try {
-                    await rpc("saveSettings", { startWithWindows: checked });
-                    setSettings({ ...settings, startWithWindows: checked });
-                    setToast(
-                      checked
-                        ? "Start at sign-in enabled."
-                        : "Start at sign-in disabled.",
-                    );
-                  } catch (err) {
-                    setError(errorText(err));
-                  }
-                }}
-              />
-              Start Mission Control at sign-in
-            </label>
+            {settings.startupSupported === false ? (
+              <p className="startup-option">
+                To start Mission Control at sign-in, add it under System
+                Settings &gt; General &gt; Login Items.
+              </p>
+            ) : (
+              <label className="checkbox-label startup-option">
+                <input
+                  type="checkbox"
+                  checked={settings.startWithWindows}
+                  onChange={async (e) => {
+                    const checked = e.target.checked;
+                    try {
+                      await rpc("saveSettings", { startWithWindows: checked });
+                      setSettings({ ...settings, startWithWindows: checked });
+                      setToast(
+                        checked
+                          ? "Start at sign-in enabled."
+                          : "Start at sign-in disabled.",
+                      );
+                    } catch (err) {
+                      setError(errorText(err));
+                    }
+                  }}
+                />
+                Start Mission Control at sign-in
+              </label>
+            )}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();

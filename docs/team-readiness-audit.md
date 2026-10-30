@@ -11,14 +11,14 @@ Current source candidate: `artifacts/release/0.4.18/MissionControl-0.4.18-source
 - New users default to their local timezone and asking before private Slack searches. Updates preserve their choices.
 - Native setup preserves unrelated configuration and refuses ownership collisions. Source/release packages exclude generated host profiles, databases, credentials, private transcripts and local test output.
 - Mac packaging marks sidecars executable, configures the supported minimum OS and .NET entitlements, and includes setup resources. Use `scripts/build-tauri.mjs`; the bare Tauri command lacks that complete configuration.
-- Mac quit/menu-bar/login-item behavior is implemented, with startup registration refused from temporary Downloads/disk-image locations. These paths still require real Mac verification.
+- Mac quit and menu-bar behavior is implemented and still requires real Mac verification. The app registers no login item on macOS; people add it under System Settings > General > Login Items.
 - Historical database migrations remain for safe upgrades. The obsolete Windows/Mac credential cleanup adapters and retry UI are removed.
 
 ## Required before team rollout
 
 1. Build on actual Apple Silicon and Intel Macs and run the .NET, Rust, Python, browser and `scripts/verify-macos.py` checks. Follow [Mac setup](mac-team-setup.md).
 2. Sign and notarize with the team's Apple Developer identity. Validate Gatekeeper and stapling on a recipient machine. Bundle-wide .NET entitlements may be narrowed to the two sidecars during signing work.
-3. Exercise Finder launch, close/reopen, Cmd+Q, Dock quit, login item changes, upgrade, data preservation and both native AI-host registrations.
+3. Exercise Finder launch, close/reopen, Cmd+Q, Dock quit, starting from System Settings Login Items, upgrade, data preservation and both native AI-host registrations.
 4. Verify each teammate's provider authentication/scopes separately. A connection or schema check is not an end-to-end recap quality test.
 
 ## Product limits that remain

@@ -47,6 +47,7 @@ internal sealed class BackendApplication : IBackendApplication
             var settings = JsonSerializer.SerializeToElement(result, AppController.Json)
                 .EnumerateObject().ToDictionary(property => property.Name, property => property.Value.Clone());
             settings["startWithWindows"] = JsonSerializer.SerializeToElement(_startup.Enabled);
+            settings["startupSupported"] = JsonSerializer.SerializeToElement(DesktopStartup.Supported);
             return settings;
         }
         return result;
