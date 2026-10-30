@@ -1,4 +1,4 @@
-Current release: **0.4.16** for the desktop, memory plugin and memory server. Install the desktop first, then update the plugin, and reload existing Claude and Codex sessions so they start the new server.
+Current release: **0.4.17** for the desktop, memory plugin and memory server. The 0.4.17 change removes desktop GitHub features only. Existing 0.4.16 Claude/Codex plugins and their GitHub connections can remain installed. For other memory-server updates, install the desktop first, update the plugin, then reload the hosts.
 
 Recap quality still has gaps on the full 24-item comparison; see [Known limitations](../KNOWN_LIMITATIONS.md). Reloading hosts uses the updated package and server but does not close those gaps.
 
