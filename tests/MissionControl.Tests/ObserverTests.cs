@@ -48,7 +48,7 @@ public sealed class ObserverTests
             using (var store = new WorkspaceStore(Path.Combine(root, "workspace.db")))
             {
                 ApproveSynthetic(store);
-                store.SaveSource(new("synthetic", "claude", "Synthetic replay", sources, true));
+                store.SaveSource(new("synthetic", "claude", "Synthetic replay", sources, true, TestPlatform.Environment));
                 await using var observer = new LocalObserver(store);
                 await observer.StartAsync();
                 Assert.Equal(1, store.Count());
@@ -146,13 +146,13 @@ public sealed class ObserverTests
             var sources = Path.Combine(root, "sources"); Directory.CreateDirectory(sources);
             var file = Path.Combine(sources, "rollout-test.jsonl");
             await Append(file,
-                Codex("session_meta", new { id = "session", cwd = @"C:\work\alpha", cli_version = "0.160.1", git = new { branch = "worktree-branch" } }),
+                Codex("session_meta", new { id = "session", cwd = Path.Combine(TestPlatform.Work, "alpha"), cli_version = "0.160.1", git = new { branch = "worktree-branch" } }),
                 Codex("event_msg", new { type = "user_message", message = "Duplicate persisted text" }),
                 Codex("response_item", new { type = "message", id = "user-1", role = "user", content = new[] { new { type = "input_text", text = "Duplicate persisted text" } } }));
             using (var store = new WorkspaceStore(Path.Combine(root, "workspace.db")))
             {
                 ApproveSynthetic(store);
-                store.SaveSource(new("codex", "codex", "Codex", sources, true));
+                store.SaveSource(new("codex", "codex", "Codex", sources, true, TestPlatform.Environment));
                 await using var observer = new LocalObserver(store); await observer.StartAsync();
                 Assert.Equal(1, store.Count());
             }
@@ -201,9 +201,9 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         await Append(fixture.File("available.jsonl"), Message("not-imported"));
-        fixture.Store.SaveSource(new("synthetic", "claude", "Disabled", fixture.SourceRoot, false));
+        fixture.Store.SaveSource(new("synthetic", "claude", "Disabled", fixture.SourceRoot, false, TestPlatform.Environment));
         fixture.Store.SaveSource(new("wsl", "claude", "WSL", fixture.SourceRoot, true, "wsl"));
-        fixture.Store.SaveSource(new("missing", "claude", "Missing", Path.Combine(fixture.SourceRoot, "missing"), true));
+        fixture.Store.SaveSource(new("missing", "claude", "Missing", Path.Combine(fixture.SourceRoot, "missing"), true, TestPlatform.Environment));
         await fixture.Observer.StartAsync();
         Assert.Equal(0, fixture.Store.Count());
         Assert.Equal("disabled", fixture.Store.GetStatuses().Single(source => source.Id == "synthetic").State);
@@ -240,7 +240,7 @@ public sealed class ObserverTests
             using (var store = new WorkspaceStore(Path.Combine(root, "workspace.db")))
             {
                 ApproveSynthetic(store);
-                store.SaveSource(new("synthetic", "claude", "Synthetic", sourceRoot, true));
+                store.SaveSource(new("synthetic", "claude", "Synthetic", sourceRoot, true, TestPlatform.Environment));
                 await using var observer = new LocalObserver(store); await observer.StartAsync();
             }
             File.Delete(file);
@@ -286,12 +286,12 @@ public sealed class ObserverTests
             Directory.CreateDirectory(active); Directory.CreateDirectory(archive);
             var path = Path.Combine(active, "rollout-session.jsonl");
             await Append(path,
-                Codex("session_meta", new { id = "stable-session", cwd = @"C:\work\project", cli_version = "0.160.1" }),
+                Codex("session_meta", new { id = "stable-session", cwd = Path.Combine(TestPlatform.Work, "project"), cli_version = "0.160.1" }),
                 Codex("response_item", new { type = "message", id = "upstream-message", role = "assistant", phase = "final_answer", content = new[] { new { type = "output_text", text = "Archive me" } } }));
             using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             ApproveSynthetic(store);
-            store.SaveSource(new("active", "codex", "Active", active, true));
-            store.SaveSource(new("archive", "codex", "Archived", archive, true));
+            store.SaveSource(new("active", "codex", "Active", active, true, TestPlatform.Environment));
+            store.SaveSource(new("archive", "codex", "Archived", archive, true, TestPlatform.Environment));
             await using var observer = new LocalObserver(store); await observer.StartAsync();
             var recordId = Assert.Single(store.Query(new(Limit: 20)).Records).Id;
             store.SaveCorrection(new(recordId, Task: "Preserved archive correction"));
@@ -301,7 +301,7 @@ public sealed class ObserverTests
             Assert.Equal(1, store.Count());
             Assert.Equal("archive", store.GetRecord(recordId)!.SourceId);
             Assert.Equal("Preserved archive correction", Assert.Single(store.GetCorrections()).Task);
-            store.SaveSource(new("overlap", "codex", "Overlap", archive, true));
+            store.SaveSource(new("overlap", "codex", "Overlap", archive, true, TestPlatform.Environment));
             await observer.ResumeAsync();
             Assert.Equal(1, store.Count());
         }
@@ -334,7 +334,7 @@ public sealed class ObserverTests
     {
         await using var fixture = new WorkspaceFixture();
         var lateRoot = Path.Combine(fixture.SourceRoot, "late");
-        fixture.Store.SaveSource(new("synthetic", "claude", "Late source", lateRoot, true));
+        fixture.Store.SaveSource(new("synthetic", "claude", "Late source", lateRoot, true, TestPlatform.Environment));
         await fixture.Observer.StartAsync();
         Assert.Equal("unavailable", Assert.Single(fixture.Store.GetStatuses()).State);
         Directory.CreateDirectory(lateRoot);
@@ -360,8 +360,8 @@ public sealed class ObserverTests
             var linkedRoot = Path.Combine(root, "linked-root"); Directory.CreateSymbolicLink(linkedRoot, outside);
             using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             ApproveSynthetic(store);
-            store.SaveSource(new("synthetic", "claude", "Selected", selected, true));
-            store.SaveSource(new("linked", "claude", "Linked root", linkedRoot, true));
+            store.SaveSource(new("synthetic", "claude", "Selected", selected, true, TestPlatform.Environment));
+            store.SaveSource(new("linked", "claude", "Linked root", linkedRoot, true, TestPlatform.Environment));
             await using var observer = new LocalObserver(store); await observer.StartAsync();
             Assert.Equal(0, store.Count());
             Assert.Equal("gap", store.GetStatuses().Single(source => source.Id == "synthetic").State);
@@ -393,7 +393,7 @@ public sealed class ObserverTests
     {
         store.SaveProject(new("synthetic", "Synthetic", "blue", "Test-only explicit consent", Path.GetTempPath()));
         if (!store.GetProjects().Single(p => p.Id == "synthetic").IsApproved) store.SetProjectApproval("synthetic", true);
-        store.SaveProject(new("native", "Native", "blue", "Test-only explicit consent", @"C:\work"));
+        store.SaveProject(new("native", "Native", "blue", "Test-only explicit consent", TestPlatform.Work));
         if (!store.GetProjects().Single(p => p.Id == "native").IsApproved) store.SetProjectApproval("native", true);
     }
     private static Task Append(string path, params object[] records) => File.AppendAllTextAsync(path, string.Join("\n", records.Select(record => JsonSerializer.Serialize(record))) + "\n", new UTF8Encoding(false));
@@ -415,7 +415,7 @@ public sealed class ObserverTests
             SourceRoot = Path.Combine(root, "sources"); Directory.CreateDirectory(SourceRoot);
             Store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             ApproveSynthetic(Store);
-            Store.SaveSource(new("synthetic", kind, "Synthetic source", SourceRoot, true));
+            Store.SaveSource(new("synthetic", kind, "Synthetic source", SourceRoot, true, TestPlatform.Environment));
             Observer = new(Store);
         }
         public string File(string name) => Path.Combine(SourceRoot, name);

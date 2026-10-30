@@ -168,7 +168,7 @@ public sealed class CompressedRolloutTests
             Store = new(Path.Combine(root, "workspace.db"));
             Store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", cwd));
             Store.SetProjectApproval("approved", true);
-            Store.SaveSource(new("source", "codex", "Codex", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            Store.SaveSource(new("source", "codex", "Codex", root, true, TestPlatform.Environment));
         }
 
         public byte[] Lines(string request, string answer, string turn = "t1")

@@ -16,7 +16,7 @@ public sealed class SupersededFinalsTests
             using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
             store.SetProjectApproval("approved", true);
-            store.SaveSource(new("source", "claude", "Claude", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            store.SaveSource(new("source", "claude", "Claude", root, true, TestPlatform.Environment));
             EvidenceRecord Final(string id, string sourceRecordId, string ingested, string stream = "session.jsonl") => new(id, "source", stream, "s", "approved", "claude", "message",
                 "Reply", "Reply " + sourceRecordId, "assistant", "2026-10-21T10:00:00Z", ingested, WorkingDirectory: root,
                 DataJson: JsonSerializer.Serialize(new { schema = "memory-v1", phase = "final", final = true, sourceRecordId, exchangeId = id }));
@@ -52,7 +52,7 @@ public sealed class SupersededFinalsTests
             using var store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
             store.SetProjectApproval("approved", true);
-            store.SaveSource(new("source", "codex", "Codex", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            store.SaveSource(new("source", "codex", "Codex", root, true, TestPlatform.Environment));
             EvidenceRecord Update(string timestamp, string stream = "session.jsonl") => new("update", "source", stream, "s", "approved", "codex", "message",
                 "Update", "Update text", "assistant", timestamp, timestamp, WorkingDirectory: root,
                 DataJson: JsonSerializer.Serialize(new { schema = "memory-v1", phase = "final", final = true }));

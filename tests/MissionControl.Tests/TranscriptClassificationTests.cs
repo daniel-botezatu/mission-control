@@ -77,7 +77,7 @@ public sealed class TranscriptClassificationTests
             {
                 store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
                 store.SetProjectApproval("approved", true);
-                store.SaveSource(new("source", "claude", "Claude", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+                store.SaveSource(new("source", "claude", "Claude", root, true, TestPlatform.Environment));
                 store.CommitBatch([
                     Record("typed", "user", "Fix the parser please", 1),
                     Record("command", "user", "<command-name>/model</command-name>\n<command-message>model</command-message>", 2),
@@ -116,7 +116,7 @@ public sealed class TranscriptClassificationTests
             {
                 store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", cwd));
                 store.SetProjectApproval("approved", true);
-                store.SaveSource(new("source", "codex", "Codex", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+                store.SaveSource(new("source", "codex", "Codex", root, true, TestPlatform.Environment));
                 // The row an older parser stored for this line: the review text as the user's message.
                 store.CommitBatch([new EvidenceRecord("legacy-review", "source", "rollout-session.jsonl", "s", "approved", "codex", "message", "<user_action>", review, "user",
                     "2026-10-21T10:00:00Z", "2026-10-21T10:00:00Z", WorkingDirectory: cwd,
@@ -159,7 +159,7 @@ public sealed class TranscriptClassificationTests
             Directory.CreateDirectory(root); Store = new(Path.Combine(root, "workspace.db"));
             Store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
             Store.SetProjectApproval("approved", true);
-            Store.SaveSource(new("source", "claude", "Claude", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            Store.SaveSource(new("source", "claude", "Claude", root, true, TestPlatform.Environment));
         }
         public Task Write(params string[] bodies) => File.WriteAllLinesAsync(Path.Combine(root, "session.jsonl"), bodies.Select((body, index) => JsonSerializer.Serialize(new
         { type = "user", uuid = "u-" + index, sessionId = "s", cwd = root, timestamp = DateTimeOffset.UtcNow.ToString("O"), message = new { role = "user", content = body } })));

@@ -19,7 +19,7 @@ public sealed class ControllerTests : IAsyncLifetime
         await app.DispatchAsync("saveProject", Args(new { project = new ProjectInfo("work", "Work", "blue", "Test-only approval", Work) }));
         await app.DispatchAsync("projects.approve", Args(new { projectId = "work", approved = true }));
         Append(messages);
-        await app.DispatchAsync("saveSource", Args(new { source = new SourceConfig("test-claude", "claude", "Synthetic Claude history", Sessions, true) }));
+        await app.DispatchAsync("saveSource", Args(new { source = new SourceConfig("test-claude", "claude", "Synthetic Claude history", Sessions, true, TestPlatform.Environment) }));
     }
     private void Append(params string[] messages) => File.AppendAllLines(Path.Combine(Sessions, "session.jsonl"), messages.Select(text => JsonSerializer.Serialize(new
     {

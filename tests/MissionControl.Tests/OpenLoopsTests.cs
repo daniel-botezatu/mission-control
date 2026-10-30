@@ -193,7 +193,7 @@ public sealed class OpenLoopsTests : IDisposable
         store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", approved));
         store.SetProjectApproval("approved", true);
         store.SaveProject(new("other", "Other", "blue", "Not approved", other));
-        store.SaveSource(new("source", "claude", "Claude", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+        store.SaveSource(new("source", "claude", "Claude", root, true, TestPlatform.Environment));
         EvidenceRecord Message(string id, string session, string author, string body, DateTimeOffset at, string? folder = null) => new(id, "source", session + ".jsonl", session,
             folder == other ? "other" : "approved", "claude", "message", body.Split('\n')[0], body, author, at.ToString("O"), at.ToString("O"), WorkingDirectory: folder ?? approved,
             DataJson: author == "assistant" ? JsonSerializer.Serialize(new { schema = "memory-v1", phase = "final", final = true }) : null);

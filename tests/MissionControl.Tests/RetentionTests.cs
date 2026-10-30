@@ -59,7 +59,7 @@ public sealed class RetentionTests
             Store = new(Path.Combine(root, "workspace.db"));
             Store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", root));
             Store.SetProjectApproval("approved", true);
-            Store.SaveSource(new("source", "claude", "Claude", root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            Store.SaveSource(new("source", "claude", "Claude", root, true, TestPlatform.Environment));
         }
 
         public EvidenceRecord Record(string id, DateTimeOffset written, string? saved = null) => new(id, "source", "session.jsonl", "s", "approved", "claude", "message",

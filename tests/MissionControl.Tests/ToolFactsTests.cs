@@ -223,7 +223,7 @@ public sealed class ToolFactsTests
             Store = new(Path.Combine(root, "workspace.db"));
             Store.SaveProject(new("approved", "Approved", "blue", "Test-only approval", Cwd));
             Store.SetProjectApproval("approved", true);
-            Store.SaveSource(new("source", kind, kind, root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            Store.SaveSource(new("source", kind, kind, root, true, TestPlatform.Environment));
         }
 
         private static string Time(DateTimeOffset? at) => (at ?? DateTimeOffset.UtcNow).ToString("O");

@@ -212,7 +212,7 @@ public sealed class HistoryParserTests
     public async Task ReplayUpgradesLegacyHumanIdentityWithoutDuplicatingOrLosingAnnotation()
     {
         using var f = new Fixture("claude");
-        var environment = OperatingSystem.IsWindows() ? "windows" : "linux";
+        var environment = TestPlatform.Environment;
         var legacyId = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"claude\n{environment}\ns\nu1\n")));
         f.Store.CommitBatch([new(legacyId, "source", "session.jsonl", "s", "approved", "claude", "message", "Prior prompt", "Prior prompt", "user", Now, Now, f.Cwd)]);
         f.Store.SaveCorrection(new(legacyId, Note: "Retained annotation"));
@@ -313,7 +313,7 @@ public sealed class HistoryParserTests
             Store = new(Path.Combine(Root, "memory.db"));
             Store.SaveProject(new("approved", "Approved", "blue", "Explicit test approval", Cwd));
             Store.SetProjectApproval("approved", true);
-            Store.SaveSource(new("source", kind, kind, Root, true, OperatingSystem.IsWindows() ? "windows" : "linux"));
+            Store.SaveSource(new("source", kind, kind, Root, true, TestPlatform.Environment));
             file = Path.Combine(Root, kind == "codex" ? "rollout-session.jsonl" : "session.jsonl");
         }
         public Task Append(params object[] lines) => File.AppendAllTextAsync(file, string.Join('\n', lines.Select(line => JsonSerializer.Serialize(line))) + "\n");

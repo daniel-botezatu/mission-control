@@ -37,7 +37,7 @@ public sealed class RewriteRecoveryTests
             store = new WorkspaceStore(Path.Combine(root, "workspace.db"));
             store.SaveProject(new("approved", "Approved project", "blue", "", root));
             store.SetProjectApproval("approved", true);
-            store.SaveSource(new("synthetic", "claude", "Synthetic transcript", sourceRoot, true));
+            store.SaveSource(new("synthetic", "claude", "Synthetic transcript", sourceRoot, true, TestPlatform.Environment));
             await using var observer = new LocalObserver(store);
             await observer.StartAsync();
             Assert.Equal(3, store.Count());
