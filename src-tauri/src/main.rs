@@ -45,8 +45,7 @@ fn open_dashboard(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = window.set_focus();
         return Ok(());
     }
-    let options = app.state::<Options>();
-    let mut builder =
+    let builder =
         WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
             .title("Mission Control")
             .inner_size(1380.0, 920.0)
@@ -54,15 +53,18 @@ fn open_dashboard(app: &tauri::AppHandle) -> Result<(), String> {
             .on_navigation(trusted_dashboard)
             .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
             .on_download(|_, _| false);
+    // WebView2 keeps its profile in the data folder and exposes automation only on request.
     #[cfg(windows)]
-    {
-        builder = builder.data_directory(options.data.join("webview"));
+    let builder = {
+        let options = app.state::<Options>();
+        let mut builder = builder.data_directory(options.data.join("webview"));
         if let Some(port) = options.automation_port {
             builder = builder.additional_browser_args(&format!(
                 "--remote-debugging-port={port} --remote-debugging-address=127.0.0.1"
             ));
         }
-    }
+        builder
+    };
     let window = builder
         .build()
         .map_err(|_| "Could not create dashboard WebView")?;
