@@ -33,6 +33,8 @@ internal sealed class StartupCache
         lock (gate)
         {
             if (entries.TryGetValue(entry, out var current) && current == result) return;
+            // Every session's launcher writes this file; keep answers other sessions added since this one loaded it.
+            foreach (var (name, answer) in Load(path, key)) entries.TryAdd(name, answer);
             entries[entry] = result;
             var document = new JsonObject { ["key"] = key, ["entries"] = new JsonObject(entries.Select(item => KeyValuePair.Create(item.Key, JsonNode.Parse(item.Value)))) };
             var temporary = path + "." + Environment.ProcessId + ".tmp";
