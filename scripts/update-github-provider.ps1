@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][string]$GitHubServerExecutable,
     [Parameter(Mandatory)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$ExpectedServerSha256,
     [Parameter(Mandatory)][string]$GhExecutable,
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.4.14',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.4.19',
     [string]$DataDirectory = (Join-Path $env:LOCALAPPDATA 'MissionControl')
 )
 $ErrorActionPreference = 'Stop'

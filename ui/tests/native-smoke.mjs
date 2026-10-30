@@ -321,8 +321,8 @@ try {
           stats.activeDatabaseBytes > 0,
       );
       const version = await rpc("host.version");
-      assert.equal(version.version, "0.4.18");
-      await page.locator('[data-sidebar-version="0.4.18"]').waitFor();
+      assert.equal(version.version, "0.4.19");
+      await page.locator('[data-sidebar-version="0.4.19"]').waitFor();
       await page.waitForFunction(
         (count) =>
           document.querySelector('[data-stat="entries"]')?.textContent ===

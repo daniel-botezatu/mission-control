@@ -1,4 +1,4 @@
-Current release: **0.4.18** for the desktop, memory plugin and memory server. The 0.4.17/0.4.18 changes remove desktop GitHub features and obsolete cleanup code only. Existing 0.4.16 Claude/Codex plugins and their GitHub connections can remain installed. For other memory-server updates, install the desktop first, update the plugin, then reload the hosts.
+Current release: **0.4.19** for the desktop, memory plugin and memory server. 0.4.19 changes the recap instructions for both Claude Code and Codex and, on Windows, the GitHub launcher: install the desktop first, update the plugin and launcher, then reload the hosts.
 
 Recap quality still has gaps on the full 24-item comparison; see [Known limitations](../KNOWN_LIMITATIONS.md). Reloading hosts uses the updated package and server but does not close those gaps.
 

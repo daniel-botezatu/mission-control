@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
-    <Version>0.4.18</Version>
+    <Version>0.4.19</Version>
     <NuGetAudit>true</NuGetAudit>
   </PropertyGroup>
 </Project>

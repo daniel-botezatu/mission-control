@@ -2,7 +2,7 @@
 
 Mission Control indexes approved local Claude Code and Codex conversations. Its desktop provides Overview, Projects, Sessions, Search and Timeline; its read-only MCP server supplies evidence to the AI host for developer-memory questions.
 
-Current source release: **0.4.18**. The desktop has no GitHub account queries, PR overview, browser-opening command or operating-system credential cleanup. Open loops shows local branch reminders and conversation drafts. GitHub and Slack connections in Claude/Codex remain separate and unchanged. Existing 0.4.16 host plugins do not need an update for these desktop-only changes.
+Current source release: **0.4.19**. The desktop has no demo workspace: a new installation starts empty and reads nothing until you enable a session source and approve a project. It has no GitHub account queries, PR overview, browser-opening command or operating-system credential cleanup. Open loops shows local branch reminders and conversation drafts. GitHub and Slack connections in Claude/Codex remain separate. Update the memory plugin for 0.4.19's recap instructions, and on Windows the optional GitHub launcher, which now stays stopped until a real GitHub call and stops again after 10 idle minutes.
 
 Windows x64 is tested. Mac packaging supports Apple Silicon and Intel, but a signed build and real Mac pilot are still required before team rollout. See the [readiness audit](docs/team-readiness-audit.md) and [Mac setup guide](docs/mac-team-setup.md).
 
@@ -43,10 +43,10 @@ python -X utf8 -m unittest discover -s integrations/tests -p "test_*.py"
 node --test scripts/build-config.test.mjs
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 node scripts/build-tauri.mjs
-powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1 -Version 0.4.18
+powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1 -Version 0.4.19
 ```
 
-The Windows release contains an NSIS installer and portable ZIP in `artifacts/release/0.4.18/`. Keep sidecars beside the portable executable. Edge WebView2 is required; .NET and Node are not separately required at runtime. Mac builds bundle the shell, backend and memory server; the Windows-only GitHub helper is omitted.
+The Windows release contains an NSIS installer and portable ZIP in `artifacts/release/0.4.19/`. Keep sidecars beside the portable executable. Edge WebView2 is required; .NET and Node are not separately required at runtime. Mac builds bundle the shell, backend and memory server; the Windows-only GitHub helper is omitted.
 
 Use [the release checklist](FINAL_INTEGRATION_CHECKLIST.md) for native lifecycle, upgrade and preservation checks. The Windows symlink test requires an explicit privilege opt-in; skipped tests must be reported separately. Keep generated output under ignored `artifacts/` or `.local/`. Do not commit databases, host configurations, credentials or real transcripts. Required desktop icons, source fixtures and lockfiles are versioned.
 
