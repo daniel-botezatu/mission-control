@@ -33,7 +33,6 @@ From a clone of the repository:
 ```sh
 npm ci --prefix ui
 dotnet restore MissionControl.slnx --packages .local/nuget
-python3 -m unittest discover -s integrations/tests -p 'test_*.py'
 node --test scripts/build-config.test.mjs
 node scripts/build-tauri.mjs --arch arm64
 ```
@@ -42,11 +41,12 @@ For Intel use `--arch x64`. The Rust target must match: `aarch64-apple-darwin` o
 
 Use the build script above: invoking Tauri's build command directly omits the additional sidecars and complete setup resources.
 
-Run .NET and Rust tests on the Mac too. Use a canonical temporary directory because project privacy checks deliberately reject symlink aliases such as `/var`:
+Run the .NET, Python and Rust tests on the Mac too. Use a canonical temporary directory: project privacy checks and the plugin installer deliberately reject symlink aliases such as `/var`, which macOS's default temporary folder uses:
 
 ```sh
 MC_TEST_TEMP=$(mktemp -d /private/tmp/mission-control-tests.XXXXXX)
 TMPDIR="$MC_TEST_TEMP/" dotnet test MissionControl.slnx --no-restore
+TMPDIR="$MC_TEST_TEMP/" python3 -m unittest discover -s integrations/tests -p 'test_*.py'
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 python3 scripts/verify-macos.py \
   --app 'src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Mission Control.app' \

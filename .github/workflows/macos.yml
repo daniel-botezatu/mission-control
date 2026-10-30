@@ -55,7 +55,10 @@ jobs:
 
       - name: Python setup tests
         if: ${{ !cancelled() && matrix.arch == 'arm64' }}
-        run: python3 -m unittest discover -s integrations/tests -p 'test_*.py'
+        run: |
+          # The plugin installer refuses symlinked output paths, and the default macOS temp folder is under /var.
+          export TMPDIR="$(mktemp -d /private/tmp/mission-control-setup-tests.XXXXXX)/"
+          python3 -m unittest discover -s integrations/tests -p 'test_*.py'
 
       - name: Build-plan tests
         if: ${{ !cancelled() && matrix.arch == 'arm64' }}
