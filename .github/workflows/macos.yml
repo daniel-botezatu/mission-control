@@ -45,24 +45,32 @@ jobs:
       - name: Install UI dependencies
         run: npm ci --prefix ui
 
-      - name: .NET, Python and build-plan tests
+      # Each check below runs even when an earlier one failed, so one run reports everything.
+      - name: .NET tests
         if: matrix.arch == 'arm64'
         run: |
           # Project privacy checks reject symlink aliases such as /var, so tests use the canonical path.
           export TMPDIR="$(mktemp -d /private/tmp/mission-control-tests.XXXXXX)/"
           dotnet test MissionControl.slnx
-          python3 -m unittest discover -s integrations/tests -p 'test_*.py'
-          node --test scripts/build-config.test.mjs
+
+      - name: Python setup tests
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
+        run: python3 -m unittest discover -s integrations/tests -p 'test_*.py'
+
+      - name: Build-plan tests
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
+        run: node --test scripts/build-config.test.mjs
 
       - name: Build the app
+        if: ${{ !cancelled() }}
         run: node scripts/build-tauri.mjs --arch ${{ matrix.arch }}
 
       - name: Rust shell tests
-        if: matrix.arch == 'arm64'
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
 
       - name: Verify the built app with synthetic history
-        if: matrix.arch == 'arm64'
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
         run: |
           python3 scripts/verify-macos.py \
             --app "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Mission Control.app" \
@@ -77,6 +85,7 @@ jobs:
           if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: mission-control-macos-${{ matrix.arch }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
