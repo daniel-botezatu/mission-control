@@ -1,5 +1,5 @@
-export const integrationFiles = [
-  'README.md', 'manage.py', 'setup.py', 'configure_github_provider.py',
+const commonIntegrationFiles = [
+  'README.md', 'manage.py', 'setup.py',
   'verify_memory_package.py', 'shared/developer-memory.md', 'shared/read-tools.json',
   'shared/recap-reader.md', 'shared/recap-coordinator.md',
 ];
@@ -11,12 +11,13 @@ export function buildConfiguration(platform, arch) {
   const rid = `${windows ? 'win' : 'osx'}-${arch}`;
   const triple = `${arch === 'arm64' ? 'aarch64' : 'x86_64'}-${windows ? 'pc-windows-msvc' : 'apple-darwin'}`;
   const extension = windows ? '.exe' : '';
-  const components = ['Backend', 'Mcp', 'Providers'].map(project => ({
+  const components = (windows ? ['Backend', 'Mcp', 'Providers'] : ['Backend', 'Mcp']).map(project => ({
     project, name: `mission-control-${project.toLowerCase()}`,
     executable: `mission-control-${project.toLowerCase()}${extension}`,
   }));
+  const integrationFiles = [...commonIntegrationFiles, ...(windows ? ['configure_github_provider.py'] : [])];
   const resources = Object.fromEntries(integrationFiles.map(file => [`../integrations/${file}`, `integrations/${file}`]));
   const bundle = { resources, externalBin: components.map(c => `binaries/${c.name}`) };
   if (!windows) bundle.macOS = { minimumSystemVersion: '15.0', entitlements: 'Entitlements.plist' };
-  return { windows, rid, triple, extension, components, bundle };
+  return { windows, rid, triple, extension, components, integrationFiles, bundle };
 }

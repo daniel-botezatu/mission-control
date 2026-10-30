@@ -29,7 +29,9 @@ def main():
               'loginItemVerified': False, 'distributionChecksRequested': args.distribution}
     process = None
     try:
-        for name in ['mission-control', 'mission-control-backend', 'mission-control-mcp', 'mission-control-providers']:
+        if (binaries / 'mission-control-providers').exists():
+            raise RuntimeError('Mac bundle contains the Windows-only GitHub helper; rebuild with scripts/build-tauri.mjs.')
+        for name in ['mission-control', 'mission-control-backend', 'mission-control-mcp']:
             binary = binaries / name
             if not binary.is_file() or not os.access(binary, os.X_OK):
                 raise RuntimeError('Missing or non-executable bundled component: ' + name)

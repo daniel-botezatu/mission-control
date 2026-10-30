@@ -3,7 +3,7 @@ import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { buildConfiguration, integrationFiles } from './build-config.mjs';
+import { buildConfiguration } from './build-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 const archFlag = args.indexOf('--arch');
 const arch = archFlag < 0 ? process.arch : args[archFlag + 1];
 const plan = buildConfiguration(process.platform, arch);
-const { windows, rid, triple, extension, components, bundle } = plan;
+const { windows, rid, triple, extension, components, integrationFiles, bundle } = plan;
 if (args.includes('--plan')) { console.log(JSON.stringify(plan, null, 2)); process.exit(0); }
 const cargoBin = path.join(process.env.CARGO_HOME || path.join(os.homedir(), '.cargo'), 'bin');
 process.env.PATH = cargoBin + path.delimiter + (process.env.PATH || '');

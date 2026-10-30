@@ -31,11 +31,11 @@ python3 scripts/verify-macos.py \
   --report artifacts/mac-pilot.json
 ```
 
-The verifier checks sidecars, executable bits, code signatures, bundled setup resources, SQLite/demo indexing, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle, login items or provider authentication.
+The Mac bundle includes the backend and memory server; the GitHub helper is Windows-only. The verifier checks sidecars, executable bits, code signatures, bundled setup resources, SQLite/demo indexing, MCP startup, owner-only new data directories and clean backend shutdown. It uses disposable synthetic data and does not connect to accounts. It does **not** verify the graphical lifecycle, login items or provider authentication.
 
 For distribution, use your organisation's Developer ID signing identity and notarization credentials through Tauri's supported environment variables. No signing identity or credentials are embedded in source. Follow [Tauri's signing/notarization instructions](https://v2.tauri.app/distribute/sign/macos/) and run the verifier with `--distribution` to require Gatekeeper acceptance and a stapled ticket. The bundled .NET executables use [Microsoft's documented apphost entitlements](https://learn.microsoft.com/en-us/dotnet/core/install/macos-notarization-issues). Test the signed result; do not disable Gatekeeper or strip quarantine to claim a release pass.
 
-The current entitlements configuration applies those exceptions to the whole bundle. Before broad distribution, review signing the three .NET sidecars with their required entitlements while keeping the Rust shell narrower; that refinement has not been implemented or verified on Mac.
+The current entitlements configuration applies those exceptions to the whole bundle. Before broad distribution, review signing the two .NET sidecars with their required entitlements while keeping the Rust shell narrower; that refinement has not been implemented or verified on Mac.
 
 ## Set up each teammate
 
