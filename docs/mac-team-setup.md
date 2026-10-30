@@ -1,6 +1,6 @@
 # Mission Control on a teammate's Mac
 
-The 0.4.11 source contains portability fixes and a reproducible verification path. **A signed Mac release has not yet been built or tested on real Mac hardware.** Start with a technical pilot; the Windows build and tests are not Mac certification. Each person runs a separate local installation with their own accounts and project approvals. There is no shared team database or central administrator service.
+The 0.4.18 source contains portability fixes and a reproducible verification path. **A signed Mac release has not yet been built or tested on real Mac hardware.** Start with a technical pilot; the Windows build and tests are not Mac certification. Each person runs a separate local installation with their own accounts and project approvals. There is no shared team database or central administrator service.
 
 ## Build and verify a pilot
 
@@ -18,7 +18,7 @@ node scripts/build-tauri.mjs --arch arm64
 
 For Intel use `--arch x64`. The Rust target must match: `aarch64-apple-darwin` or `x86_64-apple-darwin`. Prefer building and testing natively on each architecture. This produces separate native apps, not a universal binary. The app/DMG is under `src-tauri/target/<target>/release/bundle/`.
 
-Use the build script above: invoking Tauri's build command directly omits the additional sidecars and complete setup resources. For this pilot use the refreshed `MissionControl-0.4.11-source-r2.zip`; the earlier source ZIP is superseded.
+Use the build script above: invoking Tauri's build command directly omits the additional sidecars and complete setup resources. Use the current `MissionControl-0.4.18-source.zip` from `artifacts/release/0.4.18/`.
 
 Run .NET and Rust tests on the Mac too. Use a canonical temporary directory because project privacy checks deliberately reject symlink aliases such as `/var`:
 
