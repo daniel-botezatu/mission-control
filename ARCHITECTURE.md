@@ -29,7 +29,7 @@ SQLite WAL, FULL synchronization, transactional record/checkpoint batches, stabl
 
 Existing history is quarantined until explicit approval. Old intermediate/tool/external rows are discarded; available source files are replayed to establish final-response metadata. Original user row identities preserve annotations where possible. Backups use SQLite's online backup API and integrity checking. Purge removes excluded evidence, FTS entries, derived annotations and pending checkpoint text. Original source files and explicit migration/upgrade backups are separate and never silently deleted. OS backups/snapshots and SSD remanence are outside logical purge guarantees.
 
-The credential adapter is delete-only, scope-validated and used only for retired app credentials. Windows enumeration examines target attributes and never dereferences credential values; macOS requests attributes only. Failed deletion remains queued. Native host OAuth/PAT configuration is separate and is never populated from old credentials.
+The desktop has no operating-system credential-store adapter or cleanup command. Native host OAuth/PAT configuration is separate. Historical schema-7 migration metadata remains so existing databases still validate; it does not trigger credential access.
 
 ## MCP contract
 

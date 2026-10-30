@@ -1,5 +1,3 @@
-using MissionControl.Core;
-
 namespace MissionControl.Backend;
 
 internal static class Program
@@ -9,10 +7,9 @@ internal static class Program
         try
         {
             var options = BackendOptions.Parse(args);
-            ILegacyCredentialStore secrets = OperatingSystem.IsWindows() ? new WindowsLegacyCredentialStore()
-                : OperatingSystem.IsMacOS() ? new MacLegacyCredentialStore()
-                : throw new PlatformNotSupportedException("The desktop backend currently supports Windows and macOS.");
-            var application = new BackendApplication(options, secrets);
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
+                throw new PlatformNotSupportedException("The desktop backend currently supports Windows and macOS.");
+            var application = new BackendApplication(options);
             var protocol = new BackendProtocol(application, Console.OpenStandardInput(), Console.OpenStandardOutput());
             return await protocol.RunAsync();
         }

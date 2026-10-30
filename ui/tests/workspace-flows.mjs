@@ -220,6 +220,7 @@ await page.exposeFunction("syntheticRpc", async ({ method, args }) => {
       lookbackDays: 30,
       storageLimitMb: 1024,
       includeSubagents: false,
+        retiredCredentials: 3, // An older cached settings reply must not restore the removed UI.
     };
   if (method === "mcpConfig")
     return {
@@ -730,6 +731,7 @@ try {
         .click();
       assert.equal(paused, false);
       await page.getByRole("tab", { name: "Privacy & storage" }).click();
+      assert.equal(await page.getByRole("button", { name: "Retry credential cleanup" }).count(), 0);
       assert.ok(
         (await page.locator("body").innerText()).includes(
           "Mission Control contains no model or inference service.",

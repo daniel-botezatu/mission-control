@@ -475,7 +475,6 @@ public sealed partial class WorkspaceStore : IDisposable
         ValidateOwnedSchema(version, transaction);
         for (var next = version + 1; next <= SchemaVersion; next++)
         {
-            if (next == 7) QueueLegacyAiCredential(transaction);
             using var command = Command(MigrationSql(next));
             command.Transaction = transaction;
             command.ExecuteNonQuery();
@@ -483,14 +482,6 @@ public sealed partial class WorkspaceStore : IDisposable
             versionCommand.Transaction = transaction;
             versionCommand.ExecuteNonQuery();
         }
-        if (pendingLegacyAiCredential is { } retiredKey)
-        {
-            ProjectExecute(transaction, "INSERT OR IGNORE INTO retired_credentials(key) VALUES($key)", ("$key", retiredKey));
-            pendingLegacyAiCredential = null;
-        }
-        foreach (var retiredScope in pendingLegacyCredentialScopes)
-            ProjectExecute(transaction, "INSERT OR IGNORE INTO retired_credentials(key) VALUES($key)", ("$key", retiredScope));
-        pendingLegacyCredentialScopes.Clear();
         transaction.Commit();
         if (version is > 0 and < SchemaVersion) Execute("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA incremental_vacuum");
     }

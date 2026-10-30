@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using MissionControl.Core;
 
@@ -20,10 +19,10 @@ internal sealed class BackendApplication : IBackendApplication
     private volatile bool _stopping;
     public event Action? Changed;
 
-    public BackendApplication(BackendOptions options, ILegacyCredentialStore? secrets = null)
+    public BackendApplication(BackendOptions options)
     {
         _options = options;
-        _controller = new AppController(options.DataDirectory, secrets);
+        _controller = new AppController(options.DataDirectory);
         _startup = new DesktopStartup(options.DataDirectory, options.ShellPath);
         _controller.SourceChanged += OnChanged;
     }
@@ -37,14 +36,6 @@ internal sealed class BackendApplication : IBackendApplication
 
     public async Task<object?> DispatchAsync(string method, JsonElement args)
     {
-        if (method == "openExternal")
-        {
-            var value = args.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String ? url.GetString() : null;
-            if (!OfficialDocumentation.TryValidate(value, out var uri))
-                throw new ArgumentException("Only official host and MCP documentation pages can open in your browser.");
-            using var browser = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-            return new { opened = true };
-        }
         if (method is "host.startup.get" or "startupEnabled") return new { enabled = _startup.Enabled };
         if (method == "host.startup.set")
         {

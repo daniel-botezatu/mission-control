@@ -138,7 +138,6 @@ export interface Settings {
   startWithWindows: boolean;
   telemetry: false;
   dataDirectory?: string;
-  retiredCredentials?: number;
 }
 
 export interface CollectionStatistics {

@@ -463,28 +463,6 @@ export default function SettingsView({
               </div>
               <Badge tone="green">Always on</Badge>
             </div>
-            {(settings.retiredCredentials ?? 0) > 0 && (
-              <div className="notice warning" role="status">
-                <span>
-                  Some retired integration credentials still need removal from
-                  the operating system vault. They are not used by Mission
-                  Control.
-                </span>
-                <button
-                  disabled={!!busy}
-                  onClick={() =>
-                    act(
-                      "legacy-cleanup",
-                      "legacy.cleanup",
-                      {},
-                      "Retired credential cleanup retried.",
-                    )
-                  }
-                >
-                  Retry credential cleanup
-                </button>
-              </div>
-            )}
             <div className="privacy-feature">
               <ShieldCheck size={20} />
               <div>

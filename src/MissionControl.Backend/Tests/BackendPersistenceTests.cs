@@ -32,6 +32,7 @@ public sealed class BackendPersistenceTests
             var settings = JsonSerializer.SerializeToElement(await backend.DispatchAsync("settings", Args()), AppController.Json);
             Assert.Equal(180, settings.GetProperty("retentionDays").GetInt32());
             Assert.False(settings.TryGetProperty("githubCliPath", out _));
+            Assert.False(settings.TryGetProperty("retiredCredentials", out _));
             await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("remote.connections", Args()));
             await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("ask", Args()));
             // Old frontends or saved RPC requests cannot reconnect the removed desktop provider.
@@ -40,6 +41,8 @@ public sealed class BackendPersistenceTests
                 await backend.DispatchAsync("mode", Args(new { mode }));
                 await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests", Args(new { refresh = true })));
                 await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("pullRequests.open", Args(new { url = "https://github.com/example/project/pull/1" })));
+                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("openExternal", Args(new { url = "https://code.claude.com/docs/en/mcp" })));
+                await Assert.ThrowsAsync<ArgumentException>(() => backend.DispatchAsync("legacy.cleanup", Args()));
             }
         }
         finally { Directory.Delete(directory, true); }

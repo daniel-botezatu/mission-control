@@ -1,6 +1,4 @@
 using System.Text.Json;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace MissionControl.Core;
 
@@ -9,7 +7,6 @@ public sealed class AppController : IAsyncDisposable
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly string directory;
-    private readonly ILegacyCredentialStore? retiredCredentials;
     private readonly SemaphoreSlim lifecycle = new(1, 1);
     private readonly object desiredGate = new();
     private WorkspaceStore demoStore = null!, liveStore = null!;
@@ -25,9 +22,8 @@ public sealed class AppController : IAsyncDisposable
     private WorkspaceStore Store => mode == "demo" ? demoStore : liveStore;
     private LocalObserver Observer => mode == "demo" ? demoObserver : liveObserver;
     private ProjectDiscoveryService Projects => mode == "demo" ? demoProjects : liveProjects;
-    public bool IsDemo => mode == "demo";
-    public AppController(string dataDir, ILegacyCredentialStore? retiredCredentials = null)
-    { directory = Path.GetFullPath(dataDir); this.retiredCredentials = retiredCredentials; }
+    public AppController(string dataDir)
+    { directory = Path.GetFullPath(dataDir); }
 
     public async Task InitializeAsync()
     {
@@ -36,7 +32,6 @@ public sealed class AppController : IAsyncDisposable
         demoStore = new(Path.Combine(directory, "demo", "workspace.db"));
         foreach (var source in LocalObserver.DiscoverSources())
             if (!liveStore.GetSources().Any(s => s.Id == source.Id)) liveStore.SaveSource(source with { Enabled = false });
-        CleanupRetiredCredentials();
         demo = new(Path.Combine(directory, "demo"), demoStore); await demo.InitializeAsync();
         liveObserver = new(liveStore); demoObserver = new(demoStore);
         liveProjects = new(liveStore); demoProjects = new(demoStore);
@@ -74,13 +69,12 @@ public sealed class AppController : IAsyncDisposable
             case "undoCorrection": Store.DeleteCorrection(Required(args, "recordId")); NotifyChanged(); return new { saved = true };
             case "sessionProject": Store.SaveSessionProject(Required(args, "sourceId"), Required(args, "sessionId"), Text(args, "projectId")); NotifyChanged(); return new { saved = true };
             case "markRead": Store.SetSetting("dashboard.last-read", DateTimeOffset.UtcNow.ToString("O")); NotifyChanged(); return new { ok = true };
-            case "settings": return new { lookbackDays = Store.LookbackDays, includeSubagents = Store.IncludeSubagents, storageLimitMb = Store.StorageLimitBytes / (1024 * 1024), retentionDays = IntSetting("retention.days", 90), startWithWindows = liveStore.GetSetting("startWithWindows", "false") == "true", telemetry = false, databaseBytes = Store.DatabaseBytes, dataDirectory = directory, lastReadAt = Store.GetSetting("dashboard.last-read"), retiredCredentials = liveStore.GetRetiredCredentialKeys().Count + demoStore.GetRetiredCredentialKeys().Count, privacy = "Only explicitly approved local projects are indexed or returned. Unknown projects are excluded. Secret filtering is best effort. No model, GitHub or Slack client runs in the desktop. Repository metadata and branch reminders are read locally." };
+            case "settings": return new { lookbackDays = Store.LookbackDays, includeSubagents = Store.IncludeSubagents, storageLimitMb = Store.StorageLimitBytes / (1024 * 1024), retentionDays = IntSetting("retention.days", 90), startWithWindows = liveStore.GetSetting("startWithWindows", "false") == "true", telemetry = false, databaseBytes = Store.DatabaseBytes, dataDirectory = directory, lastReadAt = Store.GetSetting("dashboard.last-read"), privacy = "Only explicitly approved local projects are indexed or returned. Unknown projects are excluded. Secret filtering is best effort. No model, GitHub or Slack client runs in the desktop. Repository metadata and branch reminders are read locally." };
             case "mcpConfig":
                 var binary = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "mission-control-mcp.exe" : "mission-control-mcp");
                 var quote = (string value) => WorkspacePaths.QuoteShellArgument(value, OperatingSystem.IsWindows());
                 var command = $"{quote(binary)} --data-dir {quote(directory)} --live --time-zone {quote(TimeZoneInfo.Local.Id)}";
                 return new { executablePath = binary, dataDirectory = directory, claudeCommand = "claude mcp add --transport stdio mission-control -- " + command, codexCommand = "codex mcp add mission-control -- " + command, configurationPath = Path.Combine(WorkspacePaths.ResourcesDirectory(AppContext.BaseDirectory), "integrations") };
-            case "legacy.cleanup": CleanupRetiredCredentials(); NotifyChanged(); return new { remaining = liveStore.GetRetiredCredentialKeys().Count + demoStore.GetRetiredCredentialKeys().Count };
         }
         await lifecycle.WaitAsync();
         try
@@ -175,20 +169,6 @@ public sealed class AppController : IAsyncDisposable
     private static string Required(JsonElement args, string name) => Text(args, name) is { Length: > 0 } value ? value : throw new ArgumentException($"Missing {name}.");
     private static int Int(JsonElement args, string name, int fallback) => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.TryGetInt32(out var result) ? result : fallback;
     private static bool Bool(JsonElement args, string name) => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
-    private void CleanupRetiredCredentials()
-    {
-        if (retiredCredentials is null) return;
-        foreach (var store in new[] { liveStore, demoStore }) foreach (var reference in store.GetRetiredCredentialKeys())
-        {
-            var split = reference.Split('\n', 2);
-            if (split.Length != 2 || split[0] is not ("live" or "demo" or "live-integrations")) continue;
-            var logical = split[1];
-            if (logical != "*" && !logical.StartsWith("remote-api-key:", StringComparison.Ordinal) && !logical.StartsWith("remote:", StringComparison.Ordinal)) continue;
-            var prefix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant() + "\n" + split[0])))[..24] + ":";
-            try { if (logical == "*") retiredCredentials.DeleteScope(prefix); else retiredCredentials.Delete(prefix + logical); store.MarkRetiredCredentialDeleted(reference); }
-            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException) { }
-        }
-    }
     // The saved retention period applies by itself once a day, not only when Apply is pressed.
     // It waits for startup catch-up, checks hourly, and does nothing while collection is paused.
     internal static TimeSpan RetentionStartDelay { get; set; } = TimeSpan.FromMinutes(3);

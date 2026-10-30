@@ -72,11 +72,11 @@ try {
   record("Save collection settings stores lookback and budget", s1.lookbackDays === 45 && s1.storageLimitMb === 2048, `lookback=${s1.lookbackDays} budget=${s1.storageLimitMb}`);
   record("Desktop has no GitHub CLI setting", await page.getByLabel("GitHub CLI path (optional)").count() === 0 && !("githubCliPath" in s1));
   const removed = [];
-  for (const method of ["pullRequests", "pullRequests.open"]) {
+  for (const method of ["pullRequests", "pullRequests.open", "openExternal", "legacy.cleanup"]) {
     try { await rpc(page, method, { refresh: true, url: "https://github.com/example/project/pull/1" }); }
     catch (error) { if (/Unsupported local memory operation/.test(String(error))) removed.push(method); }
   }
-  record("Removed GitHub RPCs cannot query accounts or open PRs", removed.length === 2);
+  record("Removed provider, browser and credential RPCs are unavailable", removed.length === 4);
 
   await page.getByRole("button", { name: "Pause all", exact: true }).click();
   await sleep(1500);
@@ -89,6 +89,7 @@ try {
 
   // Privacy & storage tab: purge, sign-in, retention
   await page.getByRole("tab", { name: "Privacy & storage" }).click();
+  record("Legacy credential cleanup controls are absent", !("retiredCredentials" in s1) && await page.getByRole("button", { name: "Retry credential cleanup" }).count() === 0);
   const before = (await rpc(page, "snapshot")).totalRecords;
   await page.getByRole("button", { name: "Purge excluded history" }).click();
   await sleep(2000);

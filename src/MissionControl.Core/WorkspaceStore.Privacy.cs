@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Data.Sqlite;
 
 namespace MissionControl.Core;
@@ -105,19 +103,6 @@ public sealed partial class WorkspaceStore
             Execute("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA incremental_vacuum");
         }
     }
-
-    public IReadOnlyList<string> GetRetiredCredentialKeys()
-    {
-        lock (gate)
-        {
-            using var command = Command("SELECT key FROM retired_credentials ORDER BY key LIMIT 10000");
-            using var reader = command.ExecuteReader();
-            List<string> keys = [];
-            while (reader.Read()) keys.Add(reader.GetString(0));
-            return keys;
-        }
-    }
-    public void MarkRetiredCredentialDeleted(string key) { lock (gate) Execute("DELETE FROM retired_credentials WHERE key=$key", ("$key", key)); }
 
     private string? SanitizeCheckpointMetadata(string? json, SqliteTransaction transaction)
     {
@@ -226,28 +211,6 @@ public sealed partial class WorkspaceStore
         ProjectExecute(transaction, "INSERT INTO evidence_fts(rowid,title,body,author) SELECT r.rowid,r.title,r.body,r.author FROM evidence r WHERE " + ApprovalPredicate);
         ProjectExecute(transaction, "INSERT INTO corrections_fts(rowid,task,note) SELECT c.rowid,c.task,c.note FROM corrections c JOIN evidence r ON r.id=c.record_id WHERE " + ApprovalPredicate);
     }
-
-    private void QueueLegacyAiCredential(SqliteTransaction transaction)
-    {
-        using var config = Command("SELECT value FROM settings WHERE key='ai.config'");
-        config.Transaction = transaction;
-        if (config.ExecuteScalar() is not string json) return;
-        var mode = string.Equals(new DirectoryInfo(Path.GetDirectoryName(databasePath)!).Name, "demo", StringComparison.OrdinalIgnoreCase) ? "demo" : "live";
-        pendingLegacyCredentialScopes.Add(mode + "\n*");
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            var data = document.RootElement;
-            if (!data.TryGetProperty("endpoint", out var endpoint) && !data.TryGetProperty("Endpoint", out endpoint)) return;
-            if (!Uri.TryCreate(endpoint.GetString(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo)) return;
-            var key = mode + "\nremote-api-key:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(uri.AbsoluteUri)));
-            // Queue is created by migration 7 itself; capture in a local value until that DDL runs.
-            pendingLegacyAiCredential = key;
-        }
-        catch (Exception error) when (error is JsonException or InvalidOperationException) { }
-    }
-    private string? pendingLegacyAiCredential;
-    private readonly List<string> pendingLegacyCredentialScopes = [];
 
     private void CreateMigrationBackup(int version)
     {

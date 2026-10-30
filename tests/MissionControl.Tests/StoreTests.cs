@@ -212,10 +212,6 @@ public sealed class StoreTests
         Assert.Equal(1L, fixture.Scalar("SELECT COUNT(*) FROM evidence")); Assert.Equal(0L, fixture.Scalar("SELECT COUNT(*) FROM evidence_fts"));
         foreach (var name in new[] { "remote_connections", "remote_selections", "remote_checkpoints", "cache", "derived_commitments", "commitment_corrections" })
             Assert.Equal(0L, fixture.Scalar("SELECT COUNT(*) FROM sqlite_master WHERE name='" + name + "'"));
-        Assert.Contains("live-integrations\nremote:github-000000000000000000000000:token", store.GetRetiredCredentialKeys());
-        Assert.Contains(store.GetRetiredCredentialKeys(), key => key.StartsWith("live\nremote-api-key:", StringComparison.Ordinal));
-        Assert.Contains("live\n*",store.GetRetiredCredentialKeys());
-        Assert.Contains("live-integrations\n*",store.GetRetiredCredentialKeys());
         store.SetProjectApproval("work", true);
         Assert.Equal("legacy-user", Assert.Single(store.Query(new(Search: "walrus")).Records).Id);
         Assert.Equal("Keep decision", Assert.Single(store.GetCorrections()).Note);
