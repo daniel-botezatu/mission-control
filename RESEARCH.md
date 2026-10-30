@@ -20,4 +20,4 @@ External authentication was not performed. Configuration validation is distinct 
 
 [Official C# MCP SDK](https://github.com/modelcontextprotocol/csharp-sdk) 2.2.0 and [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) supply the standalone stdio transport/catalog. Read-only annotations are hints; database permissions, consent predicates and absent mutation operations enforce the boundary.
 
-No embeddings, model runtime, permanent Python service or unofficial GitHub/Slack server was added. The shared Python installer runs only for package/config maintenance. The skill's seven cross-source scenarios were reviewed with invented evidence; [that report](integrations/tests/forward-test.md) is a paper forward test, not an empirical host-model evaluation.
+No embeddings, model runtime, permanent Python service or unofficial GitHub/Slack server was added. The shared Python installer runs only for package/config maintenance.

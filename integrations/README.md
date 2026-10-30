@@ -4,9 +4,9 @@ Recap quality still has gaps on the full 24-item comparison; see [Known limitati
 
 # Claude Code / Codex integration
 
-For the 0.4.11 source candidate, use [the Mac setup guide](../docs/mac-team-setup.md) and `setup.py` on the recipient's computer. It detects Mac bundle locations, supports custom data/host paths, preserves choices and registers only selected hosts with `--install`. New users default to their local timezone and `ask` for private Slack. Never distribute packages generated from the builder's profile. Existing 0.4.10 installation notes above are historical; this candidate has not replaced the current user's installation.
+For a Mac pilot, use [the Mac setup guide](../docs/mac-team-setup.md) and `setup.py` on the recipient's computer. It detects Mac bundle locations, supports custom data/host paths, preserves choices and registers only selected hosts with `--install`. New users default to their local timezone and `ask` for private Slack. Never distribute packages generated from the builder's profile.
 
-Use absolute paths and the existing data directory. After a separate memory-plugin update, use the versioned executable reported by `scripts/update-memory-plugin.ps1` or recorded in `%LOCALAPPDATA%\MissionControl\host-packages\installation.json`; desktop 0.4.3's MCP setup page shows its older bundled executable. Live approved history is the default; Demo is only for tests.
+Use absolute paths and the existing data directory. After a separate memory-plugin update, use the versioned executable reported by `scripts/update-memory-plugin.ps1` or recorded in `%LOCALAPPDATA%\MissionControl\host-packages\installation.json`. Live approved history is the default; Demo is only for tests.
 
 ## Prepare native packages
 
@@ -64,7 +64,7 @@ Restart Codex; invoke `$developer-memory` with your question. The explicit confi
 
 The packaged workflow forbids shell/coding actions. For a whole-day recap it first discovers every in-scope session, then reads `get_project_activity` with `view: "messages"` and the exact original-message date bounds. Signed `nextCursor` continuations finish long messages before advancing; chats spanning days and topics remain separate evidence records. Each response budgets metadata, JSON escaping and one text representation (16,000 characters by default; configurable from 6,000 to 48,000). The workflow tracks actual review coverage rather than stopping at an arbitrary call count. It does not remove tools or permissions from unrelated Codex workflows. Mission Control's MCP itself has no writes or execution tools.
 
-Memory-server/plugin **0.4.5** can be installed beside desktop **0.4.3**: it reads the same schema-7 index and needs no reindex or collector shutdown. Prepare the host packages with a versioned MCP path such as `%LOCALAPPDATA%\MissionControl\mcp\0.4.5\mission-control-mcp.exe`, apply the owned host configuration, then refresh the native plugin cache and restart/reconnect the host. Keep old versioned binaries while existing clients use them; do not kill their processes during updates. A cursor is valid for the server process that issued it; after reconnecting, restart the bounded window. See `scripts/update-memory-plugin.ps1` for the owned local update.
+Compatible memory-server/plugin updates can use the desktop's existing schema-7 index without a reindex or collector shutdown. Prepare the host packages with a versioned MCP path such as `%LOCALAPPDATA%\MissionControl\mcp\<version>\mission-control-mcp.exe`, apply the owned host configuration, then refresh the native plugin cache and restart/reconnect the host. Keep old versioned binaries while existing clients use them; do not kill their processes during updates. A cursor is valid for the server process that issued it; after reconnecting, restart the bounded window. See `scripts/update-memory-plugin.ps1` for the owned local update.
 
 ## Add official GitHub and Slack
 
@@ -112,7 +112,7 @@ The generated Claude skill coordinates named `mission-control:memory-reader` chi
 
 For whole-day recaps, use `get_project_activity(view: "messages", format: "compact", bodyCharacters: 48000, maxOutputCharacters: 48000, limit: 50)` with explicit original-message date bounds. Continue every cursor. Conversation groups are per page; all messages are retained. Coverage is sent initially and when changed. Compact record references can be opened with `get_exchange(recordId)`. First/last snippets cannot establish complete coverage.
 
-## 0.4.8 retrieval and sign-in changes
+## Retrieval and sign-in behavior
 
 Use `prepare --time-zone Europe/Amsterdam` to save the user's recap timezone. Updates retain this choice. Every history tool accepts `timeZone`; date-only bounds are local calendar dates in that zone and `before` remains exclusive. Explicit timestamps require an offset or Z. Returned message times include their local offset. Date boundaries account for DST; do not add the offset again in the recap.
 
@@ -124,7 +124,7 @@ On Windows, `mission-control-providers.exe github --gh-executable ABS\gh.exe --g
 
 Since 0.4.14 the launcher starts the server, and reads the gh credential, only on a session's first GitHub call. Until then it answers the host's startup requests (initialize and the tool, prompt and resource lists) from `github-mcp-server.exe.startup-cache.json` next to the pinned server: the server's own earlier answers, which it marks public and which contain tool descriptions only. The cache is keyed by the server's SHA-256 and the read-tool set; a session the cache cannot answer starts the server at once and refills it. A failed start answers that call with the fixed sign-in message, and the next call tries again.
 
-Slack filtering was deferred at the user's request. Private Slack/DM text still reaches the host directly and can be saved in its transcript; Mission Control's local-history redactor does not protect those remote responses. Existing Slack authentication and consent are unchanged.
+Claude's plugin applies a best-effort secret filter to Slack results. Codex still receives results directly. Host transcripts can retain sensitive values the filter misses. Existing Slack authentication and consent are unchanged.
 
 `maintain-plugin-cache.ps1` keeps current and immediately prior Mission Control cache versions, validates ownership and rejects redirected paths before deleting older entries. In-use memory-server binaries are retained until their host reconnects and a later cleanup runs.
 
@@ -132,6 +132,6 @@ Slack filtering was deferred at the user's request. Private Slack/DM text still 
 
 `get_project_activity(view: "partitions", from, before, timeZone)` returns a body-free, paginated manifest. Default target is 80000 UTF-8 body bytes per conversation slice. Equal-timestamp messages remain together; oversized groups are flagged and still read in full. Copy each `readArguments` object to the messages view. `expectedRevision` rejects changed assignments; compare the overall `manifestRevision` on every manifest page and again before merging to catch added or removed partitions. `sessionId` is now supported in activity reads and bound into continuation cursors. Lifecycle-only sessions remain separately visible in the session inventory. No schema migration or ledger persistence is introduced.
 
-Installed 0.4.10 windows at or below 80000 body bytes use one fresh reader and fullReadArguments; larger windows use partitioned readers. This lowers 0.4.9's 320000 threshold and adds source/action auditing. Neither threshold is a measured break-even guarantee. Claude readers return receipts and cited topic/checklist ledgers, and the parent merges all completed receipts before external verification. Cross-partition completion, conflicting evidence and dependencies require reconciliation; original exchanges can be reopened. Full delivery does not prove perfect semantic recall, as the real-day comparison demonstrates. Codex uses the same full-message protocol without outlines, sequentially. The installed desktop remains 0.4.8; memory-only updates need no collector shutdown.
+Recap windows at or below 80000 body bytes use one fresh reader and fullReadArguments; larger windows use partitioned readers. The threshold is not a measured break-even guarantee. Claude readers return receipts and cited topic/checklist ledgers, and the parent merges all completed receipts before external verification. Cross-partition completion, conflicting evidence and dependencies require reconciliation; original exchanges can be reopened. Full delivery does not prove perfect semantic recall, as the real-day comparison demonstrates. Codex uses the same full-message protocol without outlines, sequentially. Memory-only updates need no collector shutdown.
 
 Reproducible probes: `integrations/tests/recap_delivery_probe.py` compares exact content fingerprints without logging bodies; `recap_model_probe.py` measures actual native Claude usage against isolated synthetic data with external servers disabled and a per-run budget cap. Character accumulation is not token usage or billed cost. A supplied real checklist/recap is needed for the requested blind real-day evaluation.
