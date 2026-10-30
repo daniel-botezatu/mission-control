@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -8,17 +7,12 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'integrations'))
 import setup
 import manage
 import verify_memory_package
-
-spec = importlib.util.spec_from_file_location('source_package', ROOT / 'scripts/package-source.py')
-source_package = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(source_package)
 
 
 class PortabilityTests(unittest.TestCase):
@@ -67,24 +61,6 @@ class PortabilityTests(unittest.TestCase):
             self.assertEqual('TEAM_GH_TOKEN', state['githubTokenEnv'])
             config = json.loads((output / 'claude/external.mcp.json').read_text())
             self.assertEqual('123.456', config['mcpServers']['mc_slack']['oauth']['clientId'])
-
-    def test_source_archive_excludes_machine_state_and_uses_portable_names(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            for name in ['src/app.cs', 'src/.env', '.aws/credentials', '.vs/state', 'artifacts/private-history.json',
-                         'src/obj/build.json', 'ui/node_modules/local.js', 'integrations/__pycache__/a.pyc',
-                         'src-tauri/binaries/mission-control-mcp.exe', 'docs/team.md', 'src/local.sqlite3',
-                         'src/local.sqlite3-wal', 'ui/debug.log', 'src/output.zip', 'ui/.DS_Store',
-                         'integrations/host-packages/installation.json', 'src/.claude/settings.json',
-                         'src/.mcp.json', 'integrations/config.toml.mission-control-owned.json',
-                         'src/session.jsonl', 'src/session.jsonl.zst', 'src/credentials.pem',
-                         'src-tauri/icons/android/mipmap-hdpi/ic_launcher.png', 'src-tauri/icons/StoreLogo.png',
-                         'src-tauri/icons/icon.png', 'fixtures/sample.jsonl']:
-                path = root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('synthetic')
-            output = root / 'out.zip'; source_package.package(root, output)
-            with zipfile.ZipFile(output) as archive:
-                self.assertEqual(['docs/team.md', 'fixtures/sample.jsonl', 'src-tauri/icons/icon.png', 'src/app.cs'], sorted(archive.namelist()))
-            with self.assertRaises(FileExistsError): source_package.package(root, output)
 
     def test_native_codex_appended_tables_are_preserved_without_adopting_edits(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -38,7 +38,6 @@ function Archive-Directory([string]$Directory,[string]$Destination) {
     } finally { $archive.Dispose() }
 }
 Archive-Directory $portable (Join-Path $releaseRoot "MissionControl-${Version}-windows-x64.zip")
-& (Join-Path $taskRoot 'scripts/package-source.ps1') -Destination (Join-Path $releaseRoot "MissionControl-${Version}-source.zip")
 $checksums=foreach ($file in Get-ChildItem -LiteralPath $releaseRoot -File | Where-Object { $_.Extension -in @('.zip','.exe') }) { $hash=Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256; $hash.Hash.ToLowerInvariant()+'  '+$file.Name }
 [IO.File]::WriteAllLines((Join-Path $releaseRoot 'SHA256SUMS.txt'),$checksums,[Text.UTF8Encoding]::new($false))
 [pscustomobject]@{releaseDirectory=$releaseRoot;note='Recipient runs integrations/setup.py to generate local host packages. No developer paths, host settings, history or credentials are packaged.'} | ConvertTo-Json

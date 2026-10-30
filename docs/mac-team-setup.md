@@ -1,12 +1,34 @@
 # Mission Control on a teammate's Mac
 
-The 0.4.19 source contains portability fixes and a reproducible verification path. **A signed Mac release has not yet been built or tested on real Mac hardware.** Start with a technical pilot; the Windows build and tests are not Mac certification. Each person runs a separate local installation with their own accounts and project approvals. There is no shared team database or central administrator service.
+Mission Control installs from its GitHub repository, <https://github.com/daniel-botezatu/mission-control>. GitHub's macOS machines build and check the Mac app for every change, but the app is **not signed or notarized** and has not yet been used day to day on a teammate's Mac: treat it as a pilot. Each person runs a separate local installation with their own accounts and project approvals. There is no shared team database or central administrator service.
 
-## Build and verify a pilot
+## Install
+
+Use macOS 15 or newer, Apple Silicon or Intel. Choose one of these:
+
+**Download a release.** From the repository's [Releases](https://github.com/daniel-botezatu/mission-control/releases) page, download the disk image for your Mac (`aarch64` for Apple Silicon, `x64` for Intel) and drag Mission Control to Applications. The app is unsigned, so macOS blocks a downloaded copy; clear the download flag once:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Mission Control.app"
+```
+
+Open Mission Control once, then register the memory plugin as in step 4 of [Set up each teammate](#set-up-each-teammate).
+
+**Build from the repository.** With Xcode command-line tools, the .NET 10 SDK, Rust, Node.js 22+ and Python 3 installed:
+
+```sh
+git clone https://github.com/daniel-botezatu/mission-control.git
+cd mission-control
+scripts/install-macos.sh            # optional: --host claude, codex or both (default)
+```
+
+The script builds the app, replaces `/Applications/Mission Control.app`, opens it once and registers the memory plugin. An app built on your own Mac is not blocked by macOS. To update, quit Mission Control, run `git pull`, and run the script again.
+
+## Build and verify manually
 
 Use macOS 15 or newer, Apple Silicon or Intel. The .NET 10 supported-platform list currently starts at macOS 15; see [Microsoft's support matrix](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md). Build on a Mac with Xcode command-line tools, the .NET SDK specified in `global.json`, Node/npm, Rust and Python 3.11+. Users of a completed app do not need Node, Rust or .NET installed; Python is needed only for integration setup.
 
-From the extracted source directory:
+From a clone of the repository:
 
 ```sh
 npm ci --prefix ui
@@ -18,7 +40,7 @@ node scripts/build-tauri.mjs --arch arm64
 
 For Intel use `--arch x64`. The Rust target must match: `aarch64-apple-darwin` or `x86_64-apple-darwin`. Prefer building and testing natively on each architecture. This produces separate native apps, not a universal binary. The app/DMG is under `src-tauri/target/<target>/release/bundle/`.
 
-Use the build script above: invoking Tauri's build command directly omits the additional sidecars and complete setup resources. Use the current `MissionControl-0.4.19-source.zip` from `artifacts/release/0.4.19/`.
+Use the build script above: invoking Tauri's build command directly omits the additional sidecars and complete setup resources.
 
 Run .NET and Rust tests on the Mac too. Use a canonical temporary directory because project privacy checks deliberately reject symlink aliases such as `/var`:
 
@@ -53,7 +75,7 @@ Setup generates host packages on **that Mac**, preflights the executable against
 
 New recap timezone defaults to the Mac's timezone. Pass `--time-zone Europe/London` or another IANA name to fix a different zone. Private Slack defaults to `ask`; use `--private-slack public` to exclude private conversations or `--private-slack allow` only when that person explicitly chooses it. Repeating setup preserves previous choices.
 
-The desktop has no GitHub account integration or PR overview. GitHub CLI is optional for the separate AI-host GitHub connection; local project discovery and branch reminders require no account login.
+The desktop has no GitHub account integration. Recaps see live pull request state only through a GitHub connection in Claude Code or Codex, such as the official GitHub plugin; Mission Control's GitHub helper is Windows-only and setup adds none on a Mac. Local project discovery and branch reminders need no login.
 
 ## Adjustable locations
 

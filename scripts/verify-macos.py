@@ -59,8 +59,11 @@ def main():
                 raise RuntimeError('Missing or non-executable bundled component: ' + name)
         for file in ['setup.py', 'manage.py', 'verify_memory_package.py', 'shared/recap-reader.md', 'shared/recap-coordinator.md']:
             if not (integrations / file).is_file(): raise RuntimeError('Missing setup resource: ' + file)
-        subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
-        report['codeSignatureVerified'] = True
+        # Pilot builds made on a teammate's Mac or in CI are unsigned; only a distribution check requires a signature.
+        signature = subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], capture_output=True, text=True)
+        report['codeSignatureVerified'] = signature.returncode == 0
+        if args.distribution and signature.returncode != 0:
+            raise RuntimeError('The app is not validly signed: ' + signature.stderr.strip()[:300])
         if args.distribution:
             subprocess.run(['spctl', '--assess', '--type', 'execute', str(app)], check=True)
             subprocess.run(['xcrun', 'stapler', 'validate', str(app)], check=True)

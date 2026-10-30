@@ -1,0 +1,106 @@
+# Builds and checks the Mac app on GitHub's macOS machines. A pushed version tag (v1.2.3) also
+# attaches the unsigned Apple Silicon and Intel disk images to that tag's GitHub release.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+          # Built on the Apple Silicon machine; it cannot be launched there, so only arm64 is verified.
+          - arch: x64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install UI dependencies
+        run: npm ci --prefix ui
+
+      - name: .NET, Python and build-plan tests
+        if: matrix.arch == 'arm64'
+        run: |
+          # Project privacy checks reject symlink aliases such as /var, so tests use the canonical path.
+          export TMPDIR="$(mktemp -d /private/tmp/mission-control-tests.XXXXXX)/"
+          dotnet test MissionControl.slnx
+          python3 -m unittest discover -s integrations/tests -p 'test_*.py'
+          node --test scripts/build-config.test.mjs
+
+      - name: Build the app
+        run: node scripts/build-tauri.mjs --arch ${{ matrix.arch }}
+
+      - name: Rust shell tests
+        if: matrix.arch == 'arm64'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Verify the built app with synthetic history
+        if: matrix.arch == 'arm64'
+        run: |
+          python3 scripts/verify-macos.py \
+            --app "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Mission Control.app" \
+            --report mac-verify.json
+
+      - name: Keep the verification report
+        if: always() && matrix.arch == 'arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-verify-report
+          path: mac-verify.json
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mission-control-macos-${{ matrix.arch }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Attach to the GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mission-control-macos-*
+          merge-multiple: true
+          path: dmg
+
+      - name: Upload the disk images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Mission Control ${TAG#v}" --notes "See the README for what changed."
+          gh release upload "$TAG" dmg/*.dmg --repo "$GITHUB_REPOSITORY" --clobber

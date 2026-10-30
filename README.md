@@ -6,6 +6,13 @@ Current source release: **0.4.19**. The desktop has no demo workspace: a new ins
 
 Windows x64 is tested. Mac packaging supports Apple Silicon and Intel, but a signed build and real Mac pilot are still required before team rollout. See the [readiness audit](docs/team-readiness-audit.md) and [Mac setup guide](docs/mac-team-setup.md).
 
+## Install
+
+- **Mac:** download the disk image from [Releases](https://github.com/daniel-botezatu/mission-control/releases) or build it with `scripts/install-macos.sh` from a clone. See the [Mac setup guide](docs/mac-team-setup.md); the Mac app is unsigned and still a pilot.
+- **Windows:** run the installer from [Releases](https://github.com/daniel-botezatu/mission-control/releases), or build it with the commands under [Build and verify](#build-and-verify).
+
+Then open Mission Control and register the memory plugin with Claude Code or Codex ([Connect Claude Code or Codex](#connect-claude-code-or-codex)).
+
 ## Use the desktop
 
 1. Open Mission Control. A new installation starts empty: nothing is read until you enable a source and approve a project.
@@ -46,7 +53,7 @@ node scripts/build-tauri.mjs
 powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1 -Version 0.4.19
 ```
 
-The Windows release contains an NSIS installer and portable ZIP in `artifacts/release/0.4.19/`. Keep sidecars beside the portable executable. Edge WebView2 is required; .NET and Node are not separately required at runtime. Mac builds bundle the shell, backend and memory server; the Windows-only GitHub helper is omitted.
+The Windows release contains an NSIS installer and portable ZIP in `artifacts/release/0.4.19/`; attach the installer to the GitHub release. The macOS workflow builds and attaches the Mac disk images when a `v*` tag is pushed. Keep sidecars beside the portable executable. Edge WebView2 is required; .NET and Node are not separately required at runtime. Mac builds bundle the shell, backend and memory server; the Windows-only GitHub helper is omitted.
 
 Use [the release checklist](FINAL_INTEGRATION_CHECKLIST.md) for native lifecycle, upgrade and preservation checks. The Windows symlink test requires an explicit privilege opt-in; skipped tests must be reported separately. Keep generated output under ignored `artifacts/` or `.local/`. Do not commit databases, host configurations, credentials or real transcripts. Required desktop icons, source fixtures and lockfiles are versioned.
 

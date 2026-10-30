@@ -2,7 +2,7 @@
 
 **Not yet ready for a general Mac rollout.** The source supports a controlled Mac build/pilot. Actual Apple Silicon/Intel execution and signed/notarized distribution remain unverified.
 
-Current source candidate: `artifacts/release/0.4.19/MissionControl-0.4.19-source.zip`. The desktop has no demo workspace and no longer queries GitHub, opens browser URLs or accesses operating-system credential stores. The Mac-only Rust code compiles for Apple Silicon and Intel without warnings (checked from Windows with Apple's C compiler stubbed out for one dependency); that is a compile check, not a Mac run. Its Mac bundle contains the shell, backend and memory server. The GitHub credential relay remains Windows-only; host GitHub/Slack connections are independent.
+Source: <https://github.com/daniel-botezatu/mission-control>; GitHub's macOS workflow builds, tests and verifies the Mac app on every push. The desktop has no demo workspace and no longer queries GitHub, opens browser URLs or accesses operating-system credential stores. The Mac-only Rust code compiles for Apple Silicon and Intel without warnings (checked from Windows with Apple's C compiler stubbed out for one dependency); that is a compile check, not a Mac run. Its Mac bundle contains the shell, backend and memory server. The GitHub credential relay remains Windows-only; host GitHub/Slack connections are independent.
 
 ## Portability implemented
 

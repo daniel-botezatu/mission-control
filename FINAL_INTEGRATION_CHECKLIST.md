@@ -9,7 +9,7 @@ Use this checklist for each release. Store run-specific logs, fingerprints, scre
 - Run `node ui/tests/workspace-flows.mjs` against the rebuilt UI. Verify approved-project boundaries, pagination, local reminders, settings and source notices.
 - Run Rust lifecycle tests when shell or packaging changes require them.
 - Check Mac and Windows build plans: Mac gets the backend and memory server; Windows also gets the optional GitHub helper. No generated host package is shipped.
-- Check that the source ZIP matches the reviewed source and contains no local state. Packaging tests cover databases, transcripts, credentials, caches and unused icons.
+- Check that the pushed repository contains no local state; `.gitignore` excludes databases, transcripts, credentials, caches, host packages and unused icons. The macOS workflow must pass on GitHub before a tag is announced.
 
 ## Windows native app
 
