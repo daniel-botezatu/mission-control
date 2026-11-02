@@ -1,4 +1,4 @@
-Current release: **0.4.19** for the desktop, memory plugin and memory server. 0.4.19 changes the recap instructions for both Claude Code and Codex and, on Windows, the GitHub launcher: install the desktop first, update the plugin and launcher, then reload the hosts.
+Current release: **0.4.20** for the desktop, memory plugin and memory server. 0.4.20 fixes the blank dashboard window on macOS and changes only the desktop: existing 0.4.19 Claude Code and Codex plugins and the Windows GitHub launcher keep working without an update.
 
 Recap quality still has gaps on the full 24-item comparison; see [Known limitations](../KNOWN_LIMITATIONS.md). Reloading hosts uses the updated package and server but does not close those gaps.
 

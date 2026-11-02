@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 OWNER = "mission-control-developer-memory-v1"
 BEGIN = "# BEGIN " + OWNER
 END = "# END " + OWNER
-VERSION = "0.4.19"
+VERSION = "0.4.20"
 TOOLS = json.loads((ROOT / "shared/read-tools.json").read_text(encoding="utf-8"))
 DESCRIPTION = "Retrieve approved coding history and correlate read-only GitHub and Slack evidence."
 

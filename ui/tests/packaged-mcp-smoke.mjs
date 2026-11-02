@@ -85,7 +85,7 @@ try {
     clientInfo: { name: "native-package-smoke", version: "1.0" },
   });
   assert.equal(initialized.serverInfo.name, "mission-control-memory");
-  assert.equal(initialized.serverInfo.version, process.env.MC_EXPECTED_MCP_VERSION || "0.4.19");
+  assert.equal(initialized.serverInfo.version, process.env.MC_EXPECTED_MCP_VERSION || "0.4.20");
   child.stdin.write(
     JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) +
       "\n",
