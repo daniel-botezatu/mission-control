@@ -384,8 +384,9 @@ public sealed class ObserverTests
         Assert.Contains("truncated", Redactor.Clean(new string('a', 1000), 64));
     }
 
-    private static object Codex(string type, object payload) => new { timestamp = "2026-10-01T10:00:00Z", type, payload };
+    // Recent, so the default history lookback keeps these records whatever day the tests run.
     private static readonly string At = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+    private static object Codex(string type, object payload) => new { timestamp = At, type, payload };
     // A Claude Code user message in the approved synthetic project, identified by its source uuid.
     private static object Message(string id, string? timestamp = null) => new { type = "user", uuid = id, sessionId = "session", cwd = Path.GetTempPath(), timestamp = timestamp ?? At, message = new { role = "user", content = "Synthetic body " + id } };
     private static EvidenceRecord? Find(WorkspaceStore store, string id) => store.Query(new(Limit: 100)).Records.SingleOrDefault(record => record.Body == "Synthetic body " + id);

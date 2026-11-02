@@ -109,6 +109,8 @@ public sealed class TranscriptClassificationTests
         var root = Path.Combine(Path.GetTempPath(), "MissionControl-review-relabel-" + Guid.NewGuid().ToString("N"));
         var cwd = Path.Combine(root, "approved"); Directory.CreateDirectory(cwd);
         var database = Path.Combine(root, "workspace.db");
+        // Recent, so the observer's default history lookback replays the line whatever day the test runs.
+        var at = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ");
         const string review = "<user_action>\n  <context>User initiated a review task.</context>\n  <action>review</action>\n  <results>No actionable regressions found.</results>\n</user_action>";
         try
         {
@@ -119,7 +121,7 @@ public sealed class TranscriptClassificationTests
                 store.SaveSource(new("source", "codex", "Codex", root, true, TestPlatform.Environment));
                 // The row an older parser stored for this line: the review text as the user's message.
                 store.CommitBatch([new EvidenceRecord("legacy-review", "source", "rollout-session.jsonl", "s", "approved", "codex", "message", "<user_action>", review, "user",
-                    "2026-10-21T10:00:00Z", "2026-10-21T10:00:00Z", WorkingDirectory: cwd,
+                    at, at, WorkingDirectory: cwd,
                     DataJson: JsonSerializer.Serialize(new { schema = "memory-v1", phase = "user", turnId = "review-1", exchangeId = "legacy", sourceRecordId = "review-1" }))]);
                 store.SetSetting("repair.hostWrittenMessages", "0");
             }
@@ -132,8 +134,8 @@ public sealed class TranscriptClassificationTests
                 // Replaying the original line with the current parser must land on the same row.
                 static string Line(object value) => JsonSerializer.Serialize(value);
                 await File.WriteAllLinesAsync(Path.Combine(root, "rollout-session.jsonl"), [
-                    Line(new { type = "session_meta", timestamp = "2026-10-21T10:00:00Z", payload = new { id = "s", cwd, cli_version = "0.162.0" } }),
-                    Line(new { type = "response_item", timestamp = "2026-10-21T10:00:00Z", payload = new { type = "message", role = "user", id = "review-1", content = new[] { new { type = "input_text", text = review } } } })]);
+                    Line(new { type = "session_meta", timestamp = at, payload = new { id = "s", cwd, cli_version = "0.162.0" } }),
+                    Line(new { type = "response_item", timestamp = at, payload = new { type = "message", role = "user", id = "review-1", content = new[] { new { type = "input_text", text = review } } } })]);
                 await using (var observer = new LocalObserver(reopened)) { await observer.StartAsync(); await observer.PauseAsync(); }
                 var after = Assert.Single(reopened.Query(new(Kind: "message", Limit: 100)).Records);
                 Assert.Equal(relabelled.Id, after.Id);
