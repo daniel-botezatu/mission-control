@@ -146,12 +146,14 @@ fn trusted_dashboard(url: &tauri::Url) -> bool {
     {
         return true;
     }
+    // macOS loads tauri://localhost with no slash; for a non-special scheme that path is "", while
+    // Windows' http://tauri.localhost/ is always "/".
     ((url.scheme() == "tauri" && url.host_str() == Some("localhost"))
         || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost")))
         && url.username().is_empty()
         && url.password().is_none()
         && url.port().is_none()
-        && matches!(url.path(), "/" | "/index.html")
+        && matches!(url.path(), "" | "/" | "/index.html")
 }
 
 fn tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -314,5 +316,33 @@ fn main() {
             );
         }
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trusted(address: &str) -> bool {
+        trusted_dashboard(&tauri::Url::parse(address).unwrap())
+    }
+
+    #[test]
+    fn trusts_the_bundled_dashboard_on_each_platform() {
+        assert!(trusted("tauri://localhost"));
+        assert!(trusted("tauri://localhost/"));
+        assert!(trusted("tauri://localhost/index.html"));
+        assert!(trusted("http://tauri.localhost/"));
+        assert!(trusted("https://tauri.localhost/index.html"));
+    }
+
+    #[test]
+    fn rejects_other_pages_hosts_and_ports() {
+        assert!(!trusted("tauri://localhost/other.html"));
+        assert!(!trusted("tauri://example.com"));
+        assert!(!trusted("http://tauri.localhost:8080/"));
+        assert!(!trusted("http://user@tauri.localhost/"));
+        assert!(!trusted("https://example.com/"));
+        assert!(!trusted("file:///index.html"));
     }
 }
