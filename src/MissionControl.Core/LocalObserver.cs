@@ -7,7 +7,7 @@ using System.Globalization;
 namespace MissionControl.Core;
 
 /// <summary>Reads complete persisted records only. Does not connect to or control coding agents.</summary>
-public sealed class LocalObserver(WorkspaceStore store) : IAsyncDisposable
+public sealed partial class LocalObserver(WorkspaceStore store) : IAsyncDisposable
 {
     private const int MaximumLineBytes = 4 * 1024 * 1024;
     private const int MaximumPassBytes = 16 * 1024 * 1024;

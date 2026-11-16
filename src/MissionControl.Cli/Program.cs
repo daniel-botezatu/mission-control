@@ -7,6 +7,11 @@ string? Option(string name) { var index = Array.IndexOf(args, name); return inde
 var dataDirectory = Path.GetFullPath(Option("--data-dir") ?? ".local/preview-data");
 var json = AppController.Json;
 void Print(object value) => Console.WriteLine(JsonSerializer.Serialize(value, json));
+if (command == "alexa-bridge")
+{
+    await AlexaBridge.RunAsync(dataDirectory, Option("--config") ?? throw new ArgumentException("--config is required"));
+    return;
+}
 if (command == "compact")
 {
     var database = Path.Combine(dataDirectory, "live", "workspace.db");

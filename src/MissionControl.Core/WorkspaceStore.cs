@@ -11,7 +11,7 @@ public sealed partial class WorkspaceStore : IDisposable
 {
     public const long MaximumDatabaseBytes = 1024L * 1024 * 1024;
     public long StorageLimitBytes => Math.Clamp(long.TryParse(GetSetting("storage.limitMb"), out var mb) ? mb : 1024, 64, 8192) * 1024 * 1024;
-    private const int SchemaVersion = 7;
+    private const int SchemaVersion = 8;
     private readonly object gate = new();
     private readonly SqliteConnection connection;
     private readonly string databasePath;
@@ -59,6 +59,7 @@ public sealed partial class WorkspaceStore : IDisposable
                 throw new InvalidOperationException("SQLite WAL mode could not be enabled for the selected workspace.");
             Execute("PRAGMA max_page_count=2147483646");
             Migrate();
+            pushJournalEnabled = GetSetting("alexa.push.initialized") == "1";
             RemoveHostWrittenMessages();
             var pageSize = Convert.ToInt64(Scalar("PRAGMA page_size"), CultureInfo.InvariantCulture);
             Execute("PRAGMA max_page_count=" + (StorageLimitBytes / pageSize).ToString(CultureInfo.InvariantCulture));
@@ -189,11 +190,15 @@ public sealed partial class WorkspaceStore : IDisposable
     public void CommitBatch(IEnumerable<EvidenceRecord> records, StreamCheckpoint? checkpoint = null, bool reinterpretation = false)
         => CommitBatchCore(records, checkpoint, reinterpretation);
 
+    /// <summary>Committed, approved record IDs only. Consumers recheck visibility before delivery.</summary>
+    public event Action<IReadOnlyList<string>>? RecordsCommitted;
+
     private void CommitBatchCore(IEnumerable<EvidenceRecord> records, StreamCheckpoint? checkpoint, bool reinterpretation)
     {
         // Materialize only one bounded batch; an accidentally unbounded producer fails before a transaction.
         var batch = records.Take(513).ToArray();
         if (batch.Length > 512) throw new ArgumentException("An ingestion batch cannot exceed 512 records.", nameof(records));
+        var committed = new List<string>();
         lock (gate)
         {
             // Leave room for diagnostics/settings and avoid starting a batch that cannot fit.
@@ -218,6 +223,11 @@ public sealed partial class WorkspaceStore : IDisposable
                     command.Transaction = transaction;
                     var written = command.ExecuteNonQuery();
                     changed += written;
+                    if (written > 0)
+                    {
+                        committed.Add(record.Id);
+                        if (pushJournalEnabled) ProjectExecute(transaction, "INSERT INTO alexa_push_events(record_id) VALUES($id)", ("$id", record.Id));
+                    }
                 }
                 if (checkpoint is not null)
                 {
@@ -234,6 +244,10 @@ public sealed partial class WorkspaceStore : IDisposable
             catch (SqliteException error) when (error.SqliteErrorCode == 13) { transaction.Rollback(); throw new StorageCapacityException(); }
             catch { transaction.Rollback(); throw; }
         }
+        if (committed.Count > 0 && RecordsCommitted is { } handlers)
+            foreach (Action<IReadOnlyList<string>> handler in handlers.GetInvocationList())
+                try { handler(committed); }
+                catch { /* A notification consumer cannot roll back already committed collection. */ }
     }
 
     public IReadOnlyList<ProjectInfo> GetProjects()
@@ -516,7 +530,7 @@ public sealed partial class WorkspaceStore : IDisposable
 
     private static string MigrationSql(int version)
     {
-        var name = version switch { 1 => "001_Initial.sql", 2 => "002_Remote.sql", 3 => "003_Collection.sql", 4 => "004_AutomaticProjects.sql", 5 => "005_ManualContextSearch.sql", 6 => "006_ProjectPaths.sql", 7 => "007_LocalMemory.sql", _ => throw new InvalidOperationException("Unsupported workspace schema version.") };
+        var name = version switch { 1 => "001_Initial.sql", 2 => "002_Remote.sql", 3 => "003_Collection.sql", 4 => "004_AutomaticProjects.sql", 5 => "005_ManualContextSearch.sql", 6 => "006_ProjectPaths.sql", 7 => "007_LocalMemory.sql", 8 => "008_PushJournal.sql", _ => throw new InvalidOperationException("Unsupported workspace schema version.") };
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MissionControl.Core.Migrations." + name) ?? throw new InvalidOperationException("The workspace schema migration is missing from the application.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
@@ -549,6 +563,7 @@ public sealed partial class WorkspaceStore : IDisposable
             terms.Add("lower(trim(COALESCE(r.state,''))) IN ('open','draft')");
         else Add("lower(trim(r.state))=$state", "$state", options.State?.Trim().ToLowerInvariant());
         Add("r.session_id=$session", "$session", options.SessionId);
+        Add("r.branch=$branch", "$branch", options.Branch);
         Add("r.changed_at >= $since", "$since", options.Since is null ? null : Timestamp(options.Since));
         Add("r.author LIKE $person ESCAPE '\\'", "$person", options.Person is null ? null : "%" + options.Person.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%");
         AddSearchPredicate(options.Search, terms, parameters);
